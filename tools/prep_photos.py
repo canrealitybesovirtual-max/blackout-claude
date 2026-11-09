@@ -5,9 +5,10 @@ from PIL import Image
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-JOBS = [  # source, output, target mean linear albedo (= LAYER_ALBEDO in materials.js), contrast kept
-    ('concrete_floor.png', 'concrete.webp', 0.40, 0.55),
-    ('concrete_ceiling.png', 'ceiling.webp', 0.36, 0.85),
+JOBS = [  # source, output, target mean linear albedo (= LAYER_ALBEDO in materials.js), contrast kept, saturation kept
+    ('concrete_floor.png', 'concrete.webp', 0.40, 0.55, 1.0),
+    ('concrete_ceiling.png', 'ceiling.webp', 0.36, 0.85, 1.0),
+    ('plate.jpg', 'plate.webp', 0.28, 0.8, 0.6),
 ]
 SIZE = 512
 
@@ -25,7 +26,7 @@ def low_pass(a, cells):  # wrap-safe low-frequency light estimate
         out[..., c] = np.asarray(big)[h:2 * h, w:2 * w]
     return out
 
-for src, dst, target, contrast in JOBS:
+for src, dst, target, contrast, satk in JOBS:
     a = to_lin(np.asarray(Image.open(ROOT / 'textures/src' / src).convert('RGB'), dtype=np.float64) / 255)
     n = min(a.shape[:2]); a = a[:n, :n]
     # make seamless: blend with a half-shifted copy near the edges
@@ -40,6 +41,7 @@ for src, dst, target, contrast in JOBS:
     a = a / np.maximum(lowl, 1e-4) * lum.mean()
     m = a.mean((0, 1), keepdims=True)
     a = m + (a - m) * contrast            # trowelled floors are more even than the photo
+    g = a.mean(2, keepdims=True); a = g + (a - g) * satk
     a = a * (target / a.mean())
     img = Image.fromarray((np.clip(to_srgb(a), 0, 1) * 255 + 0.5).astype(np.uint8), 'RGB').resize((SIZE, SIZE), Image.LANCZOS)
     img.save(ROOT / 'textures' / dst, 'WEBP', quality=90, method=6)

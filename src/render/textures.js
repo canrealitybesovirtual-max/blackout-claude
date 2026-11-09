@@ -144,6 +144,8 @@ const NORMAL_STRENGTH = { concrete: 3, block: 4, ceiling: 4, paintsteel: 2, stee
 const PHOTO = {
   concrete: { rough: 0.62, rk: 0.45, tm: 0, ks: 2.2 },
   ceiling: { rough: 0.86, rk: 0.25, tm: 1, ks: 2.6 },
+  // steel: grey reads as bare metal, rust (saturated orange) as rough non-metal
+  plate: { rough: 0.42, rk: 0.35, tm: 0, ks: 3.2, metal: 0.85 },
 };
 // load photo layers (null = keep the generated layer); drawn at the profile's size
 export async function loadPhotoLayers(size, base = 'textures/') {
@@ -182,8 +184,14 @@ export function makeMaterialArrays(size, anisotropy = 1, photos = {}) {
         const rel = lum[i] / Math.max(1e-4, mean[i]) - 1, q = base + i * 4;
         h[i] = Math.max(-1, Math.min(1, rel * 1.6));
         alb[q] = ph[i * 4]; alb[q + 1] = ph[i * 4 + 1]; alb[q + 2] = ph[i * 4 + 2];
-        alb[q + 3] = Math.round(sat(pd.rough - rel * pd.rk) * 255);   // pits and cracks rougher
-        nrm[q + 2] = pd.tm * 255; nrm[q + 3] = 0;
+        let rough = pd.rough - rel * pd.rk, metal = 0;
+        if (pd.metal) {
+          const r = ph[i * 4], g = ph[i * 4 + 1], b = ph[i * 4 + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+          const rust = sat(((mx - mn) / Math.max(1, mx) - 0.18) * 3.5) * (r > b ? 1 : 0);
+          metal = pd.metal * (1 - rust); rough = rough * (1 - rust) + 0.85 * rust;
+        }
+        alb[q + 3] = Math.round(sat(rough) * 255);   // pits and cracks rougher
+        nrm[q + 2] = pd.tm * 255; nrm[q + 3] = Math.round(metal * 255);
       }
       ks = pd.ks * size / 256;
     } else
