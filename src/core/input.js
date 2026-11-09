@@ -123,16 +123,28 @@ export class Input {
     if (this.device !== 'pad') { this._pad.prev = p.buttons.map((x, i) => b(i)); return false; }
     this.move.x = ax; this.move.y = -ay;
     const curve = v => Math.sign(v) * v * v;
-    const sp = 3.4 * this.sens * dt;
+    const sp = 3.0 * this.sens * dt;
     this.look.x -= curve(rx) * sp; this.look.y -= curve(ry) * sp * 0.75 * (this.invertY ? -1 : 1);
     this.held.fire = b(7); this.held.aim = b(6);
     if (edge(10)) this.held.sprint = !this.held.sprint;
     if (Math.hypot(ax, ay) < 0.3) this.held.sprint = false;
-    const map = { 0: 'jump', 2: 'reload', 3: 'swap', 4: 'light', 5: 'use', 11: 'inspect', 13: 'mode', 8: 'perf', 9: 'pause' };
+    // Xbox layout: A jump, B crouch, X use, Y flashlight, LB swap, RB reload, LT aim, RT fire,
+    // LS click sprint, RS click inspect, D-pad up flashlight, D-pad down fire mode, View stats, Menu pause
+    const map = { 0: 'jump', 2: 'use', 3: 'light', 4: 'swap', 5: 'reload', 11: 'inspect', 12: 'light', 13: 'mode', 8: 'perf', 9: 'pause' };
     for (const k in map) if (edge(+k)) this.pressed.add(map[k]);
     if (edge(1)) this.crouch = !this.crouch;
     this._pad.prev = p.buttons.map((x, i) => b(i));
     return true;
+  }
+  // title / pause menu: A or Menu on a pad starts / resumes (edge), returns true once
+  menuPoll() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let p = null; for (const g of pads) if (g && g.connected) { p = g; break; }
+    if (!p) return false;
+    const now = [0, 9].map(i => !!(p.buttons[i] && p.buttons[i].pressed)), was = this._menuPrev || [true, true];
+    this._menuPrev = now;
+    if ((now[0] && !was[0]) || (now[1] && !was[1])) { this.device = 'pad'; this._pad.prev = p.buttons.map(x => x.pressed); return true; }
+    return false;
   }
   update(dt) {
     if (!this.enabled) { this.move.x = this.move.y = 0; return; }

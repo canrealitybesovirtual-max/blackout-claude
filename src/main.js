@@ -184,7 +184,7 @@ async function boot() {
     }
     $('xhair').style.opacity = weapons.ads > 0.3 || player.sprinting ? 0 : 0.85;
     const pr = interactPrompt();
-    $('prompt').textContent = pr ? `[${input.device === 'pad' ? 'RB' : input.device === 'touch' ? 'USE' : 'E'}] ${pr}` : '';
+    $('prompt').textContent = pr ? `[${input.device === 'pad' ? 'X' : input.device === 'xr' ? 'TRIGGER' : input.device === 'touch' ? 'USE' : 'E'}] ${pr}` : '';
     $('stam').style.opacity = player.stamina < 99 ? 1 : 0; $('stamfill').style.width = player.stamina + '%';
     if ((toastT -= dt) < 0) $('toast').style.opacity = 0;
     return pr;
@@ -232,7 +232,11 @@ async function boot() {
   // ---- menu / pause ----
   let running = false;
   const menu = $('menu');
+  // Edge on Xbox maps the pad to a mouse cursor unless told otherwise: cursor in menus, raw pad in play
+  const padMode = m => { try { if ('gamepadInputEmulation' in navigator) navigator.gamepadInputEmulation = m; } catch (e) { /* not Edge */ } };
+  padMode('mouse');
   async function start(noLock) {
+    padMode('gamepad');
     menu.classList.add('hide');
     await audio.init();
     perf.notes.audio = audio.sampleInfo || 'synth only';
@@ -241,7 +245,7 @@ async function boot() {
     if (!noLock && !input.dragLook && !('ontouchstart' in window)) input.requestLock();
     last = performance.now();
   }
-  function pause() { if (!running) return; running = false; input.enabled = false; menu.classList.remove('hide'); $('start').textContent = 'RESUME'; if (audio.ctx) audio.ctx.suspend(); }
+  function pause() { if (!running) return; padMode('mouse'); input._menuPrev = [true, true]; /* a held button is not a resume */ running = false; input.enabled = false; menu.classList.remove('hide'); $('start').textContent = 'RESUME'; if (audio.ctx) audio.ctx.suspend(); }
   input.onUnlock = () => { if (!input.dragLook && !(xr && xr.on)) pause(); };
   $('start').onclick = start;
   $('quality').onchange = e => { try { localStorage.setItem('bs.quality', e.target.value); } catch (x) { /* blocked */ } location.search = '?q=' + e.target.value; };
@@ -269,6 +273,7 @@ async function boot() {
     const c0 = performance.now();
     U.uTime.value = now / 1000;
     renderer.info.reset();
+    if (!running && !menu.classList.contains('hide') && input.menuPoll()) start(input.device === 'pad');
     if (running) {
       input.update(dt);
       if (input.has('perf')) { perf.visible = !perf.visible; $('perf').style.display = perf.visible ? 'block' : 'none'; }
