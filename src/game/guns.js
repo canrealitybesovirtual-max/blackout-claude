@@ -101,7 +101,7 @@ async function loadRig(def, fresh) {
   } else if (gun[0]) host = gun[0];
   const muzzle = new THREE.Object3D(); host.add(muzzle); host.updateWorldMatrix(true, false);
   muzzle.position.copy(host.worldToLocal(tip.clone()));
-  const handR = findBone(root, /^Hand_R(?!.*end)/);
+  const handR = findBone(root, /^Hand_R(?!.*end)/), handL = findBone(root, /^Hand_L(?!.*end)/);
   const up = new THREE.Vector3(0, 1, 0), r = new THREE.Vector3().crossVectors(d, up).normalize(), u = new THREE.Vector3().crossVectors(r, d);
   const basis = new THREE.Matrix4().makeBasis(r, u, d.clone().negate()); // camera axes in the file
   const toCam = new THREE.Quaternion().setFromRotationMatrix(basis).invert();
@@ -115,7 +115,7 @@ async function loadRig(def, fresh) {
     hipQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(Rv, Uv, F.clone().negate())).invert();
   }
   const scale = def.len / L;                 // the packs are not at real size (the Saiga is ~2x)
-  return { root, mixer, A, eye, bore: d, muzzle, handR, toCam, hipQ, mats, meshes, scale, rearSight: rear.p.clone() };
+  return { root, mixer, A, eye, bore: d, muzzle, handR, handL, toCam, hipQ, mats, meshes, scale, rearSight: rear.p.clone() };
 }
 
 export class GunSystem {
@@ -306,7 +306,9 @@ export class GunSystem {
   }
 
   // VR: second rigs on the right controller, gun along the controller, its right hand on the grip.
-  // The left arm and the upper arms are not drawn (the left hand holds the torch).
+  // Upper arms are not drawn; the left arm shows only while the real left hand grips the handguard.
+  vrGun() { return this.cur !== 'torch' && this.vr[this.cur] || null; }
+  setSupport(on) { const r = this.vrGun(); for (const id in this.vr) for (const m of this.vr[id].mats) m.uniforms.uHideLeft.value = on && this.vr[id] === r ? 0 : 1; }
   async makeVR() {
     const group = new THREE.Group();
     for (const id in GUNS) {
@@ -321,6 +323,10 @@ export class GunSystem {
       rig.muzzle.add(f); rig.flash = f; rig.holder = holder;
       rig.boreWorld = () => this._d.set(0, 0, -1).transformDirection(holder.matrixWorld);
       holder.visible = id === this.cur; group.add(holder);
+      // the animations' support hand on the handguard, in the gun's frame (rest pose): where the
+      // real left hand grabs, and the line the two hands aim along
+      holder.updateMatrixWorld(true);
+      rig.supportRest = rig.handL ? new THREE.Vector3().setFromMatrixPosition(rig.handL.matrixWorld) : new THREE.Vector3(0, 0, -0.3);
       this.vr[id] = rig;
     }
     return group;

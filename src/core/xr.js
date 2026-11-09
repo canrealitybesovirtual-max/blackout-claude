@@ -2,6 +2,7 @@
 // real walking kept out of walls; gun rigs in the right hand, the torch in the left (both aim along the ray). Comfort: the head is never moved
 // by the game except to stop it going through a wall; no bob, no forced rotation.
 import * as THREE from 'three';
+import { makeModelMaterial } from '../render/shaders.js';
 
 const TURN = 1.92;      // rad/s at full stick (smooth turning)
 const DEAD = 0.15;
@@ -13,7 +14,7 @@ export class XR {
     this.rig = new THREE.Group(); this.rig.name = 'xr-rig'; scene.add(this.rig);
     this.hands = { left: null, right: null }; this.prev = { left: [], right: [] };
     this.view = new THREE.PerspectiveCamera();   // world-space stand-in for the head (zones, audio, probes)
-    this._h = new THREE.Vector3(); this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
+    this._h = new THREE.Vector3(); this._m = new THREE.Matrix4(); this._lp = new THREE.Vector3(); this._hp = new THREE.Vector3(); this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._q2 = new THREE.Quaternion(); this._e = new THREE.Euler(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
     renderer.xr.enabled = true;
     // hand models arrive later (setModels): left = arm holding the torch, right = the gun rigs
     this.models = { left: null, right: null }; this.torch = null; this.torchLen = 0.3;
@@ -31,8 +32,31 @@ export class XR {
       this.models[h] = m[h];
       if (this.hands[h]) this.hands[h].ray.add(m[h]);
     }
-    if (m.torch) { this.torch = m.torch; this.torchLen = m.len; }
+    if (m.torch) { this.torch = m.torch; this.torchLen = m.len; this._buildHolster(); }
+    if (m.guns) this.guns = m.guns;
   }
+  // flashlight pouch on the left thigh: a slim open sleeve, nothing above the torch's head
+  _buildHolster() {
+    const t = this.torch;
+    this.torchHome = { parent: t.parent, pos: t.position.clone(), quat: t.quaternion.clone() };
+    const b = new THREE.Box3().setFromObject(t), r = Math.max(b.max.x - b.min.x, b.max.y - b.min.y) * 0.5 * 1.08;
+    const H = this.holster = new THREE.Group(); H.visible = false; this.scene.add(H);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.055, 20, 1, true).rotateX(Math.PI / 2),
+      makeModelMaterial(new THREE.MeshStandardMaterial({ color: 0x15170f, roughness: 0.92, side: THREE.DoubleSide })));
+    sleeve.position.z = -this.torchLen * 0.08;                    // round the body, below the head
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.022, 0.09), sleeve.material);
+    strap.position.set(r + 0.002, 0, -this.torchLen * 0.08 - 0.03);   // belt strap on the leg side, out of the hand's way
+    H.add(sleeve, strap);
+    this.inHolster = false; this.support = false; this.bodyYaw = null; this.headTop = 1.7;
+  }
+  _holsterTorch(on) {
+    const t = this.torch; if (!t || on === this.inHolster) return;
+    this.inHolster = on;
+    if (on) { this.holster.add(t); t.position.set(0, 0, 0); t.quaternion.identity(); }
+    else { const h = this.torchHome; h.parent.add(t); t.position.copy(h.pos); t.quaternion.copy(h.quat); }
+    this._pulse('left', 0.5, 40);
+  }
+  _pulse(side, k, ms) { const H = this.hands[side], a = H && H.src.gamepad && H.src.gamepad.hapticActuators; if (a && a[0] && a[0].pulse) a[0].pulse(k, ms); }
   async enter() {
     if (!this.supported || this.on) return;
     const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
@@ -49,6 +73,8 @@ export class XR {
     this.placeRig(true);
     session.addEventListener('end', () => {
       this.on = false; this.session = null;
+      if (this.torch) { this._holsterTorch(false); this.holster.visible = false; }
+      this._setSupport(false);
       this.scene.add(this.camera); this.input.device = 'kbm';
       if (this.onEnd) this.onEnd();
     });
@@ -88,6 +114,7 @@ export class XR {
       rig.position.x += P.pos.x - h.x; rig.position.z += P.pos.z - h.z;
       rig.updateMatrixWorld(true);
     }
+    this._leftHand();
     // the head's facing drives stick movement
     this.camera.getWorldQuaternion(this._q);
     const f = new THREE.Vector3(0, 0, -1).applyQuaternion(this._q);
@@ -97,6 +124,61 @@ export class XR {
     this.camera.matrixWorld.decompose(v.position, v.quaternion, this._s);
     v.matrixWorld.compose(v.position, v.quaternion, new THREE.Vector3(1, 1, 1)); v.matrixWorldInverse.copy(v.matrixWorld).invert();
     if (xc && xc.projectionMatrix) v.projectionMatrix.copy(xc.projectionMatrix);
+  }
+  _setSupport(on) {
+    if (this.support === on) return;
+    this.support = on; if (this.guns) this.guns.setSupport(on);
+    if (this.models.left) this.models.left.visible = !on;          // the gun rig's own left arm takes over
+    if (!on && this.models.right) this.models.right.quaternion.identity();
+    if (on) this._pulse('left', 0.35, 30);
+  }
+  // left hand: holster / draw the torch at the thigh, grip the gun's handguard, aim with both hands
+  _leftHand() {
+    if (!this.holster) return;
+    const L = this.hands.left, R = this.hands.right;
+    // body yaw follows the head past a dead zone (the thigh does not swing with every glance)
+    this.camera.getWorldQuaternion(this._q);
+    const f = this._s.set(0, 0, -1).applyQuaternion(this._q), hy = Math.atan2(-f.x, -f.z);
+    if (this.bodyYaw === null) this.bodyYaw = hy;
+    let dy = Math.atan2(Math.sin(hy - this.bodyYaw), Math.cos(hy - this.bodyYaw));
+    if (Math.abs(dy) > 0.6) this.bodyYaw += dy - Math.sign(dy) * 0.6;
+    // thigh from the head height above the floor (tracks crouching)
+    const h = this.headWorld(this._h), floor = this.rig.position.y, hh = h.y - floor;
+    this.headTop = Math.max(hh, this.headTop - 0.0005);
+    const ty = floor + Math.max(0.3, this.headTop * 0.47 - Math.max(0, this.headTop - hh) * 0.55);
+    const cy = Math.cos(this.bodyYaw), sy = Math.sin(this.bodyYaw);
+    const lx = -0.19, fz = 0.02, back = 0.09;                   // left, slightly forward of the leg's centre
+    const H = this.holster; H.visible = true;
+    H.position.set(h.x + sy * back + cy * lx - sy * fz, ty, h.z + cy * back - sy * lx - cy * fz);
+    H.quaternion.setFromEuler(this._e.set(Math.PI / 2 + 0.12, this.bodyYaw, 0, 'YXZ'));   // lens down, tipped forward
+    H.updateMatrixWorld(true);
+    if (!L) return;
+    const gp = L.src.gamepad, down = !!(gp && gp.buttons[1] && gp.buttons[1].pressed);
+    L.grip.updateMatrixWorld(true); const lp = this._lp.setFromMatrixPosition(L.grip.matrixWorld);
+    const gun = this.guns && this.guns.vrGun();
+    if (down && !this._lgPrev) {
+      const nearHolster = lp.distanceTo(this._hp.setFromMatrixPosition(H.matrixWorld)) < 0.2;
+      if (nearHolster) this._holsterTorch(!this.inHolster);
+      else if (this.inHolster && gun && gun.handL) {
+        gun.handL.getWorldPosition(this._hp);
+        if (lp.distanceTo(this._hp) < 0.17) { this._setSupport(true); this._supGun = gun; }
+      }
+    }
+    if (!down || !gun || gun !== this._supGun || !this.inHolster) this._setSupport(false);
+    this._lgPrev = down;
+    // two hands: the gun turns so the line from its grip hand to its support hand runs to the real left hand
+    if (this.support && R) {
+      const M = this.models.right, g = R.ray;
+      g.getWorldQuaternion(this._q);
+      const a = this._a.copy(gun.supportRest).applyQuaternion(this._q).normalize();
+      R.grip.updateMatrixWorld(true);
+      const gpos = this._hp.setFromMatrixPosition(R.grip.matrixWorld), want = this._b.copy(lp).sub(gpos);
+      if (want.lengthSq() > 0.01) {
+        const Q = this._q2.setFromUnitVectors(a, want.normalize()).multiply(this._q);
+        M.quaternion.copy(this._q.invert()).multiply(Q);
+        if (lp.distanceTo(gpos) > gun.supportRest.length() + 0.25) this._setSupport(false);   // let go: hands too far apart
+      }
+    }
   }
   _poll() {
     const I = this.input;
@@ -127,7 +209,7 @@ export class XR {
   // flashlight in the right hand (null = none)
   // the torch in the left hand (its lens is on its +z end)
   lightPose(outPos, outDir) {
-    if (!this.torch || !this.hands.left) return false;
+    if (!this.torch || (!this.hands.left && !this.inHolster)) return false;
     this.torch.updateWorldMatrix(true, false);
     outPos.set(0, 0, this.torchLen * 0.5 + 0.01).applyMatrix4(this.torch.matrixWorld);
     outDir.set(0, 0, 1).transformDirection(this.torch.matrixWorld);

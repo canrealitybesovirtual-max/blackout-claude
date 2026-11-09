@@ -45,6 +45,6 @@ Add a zone: new file in `src/world/zones`, list it in `level.js` with neighbours
 
 ## VR (WebXR)
 Menu shows ENTER VR when the browser supports it (Quest browser, PC VR in Chrome / Edge). Quest auto-picks the VR profile (MSAA, no grain / vignette / head bob, foveation 1).
-Controls: gun in the right hand (aims along the controller), flashlight in the left. Left stick move (click = run), right stick smooth turn, right trigger fire (or use, pointed at a door panel), A reload, B next gun, left trigger flashlight, X crouch, Y stats, right stick click jump. Real walking is followed by the body and stopped at walls.
+Controls: gun in the right hand (aims along the controller), flashlight in the left. Left stick move (click = run), right stick smooth turn, right trigger fire (or use, pointed at a door panel), A reload, B next gun, left trigger flashlight, left grip at the left thigh holsters / draws the flashlight; with it holstered, left grip on the gun's handguard holds the gun with both hands (the rig's own support hand, aim follows both hands), X crouch, Y stats, right stick click jump. Real walking is followed by the body and stopped at walls.
 WebXR needs a secure origin: on Quest use `adb reverse tcp:8000 tcp:8000` and open http://localhost:8000, or host the folder over https (e.g. GitHub Pages).
 Tested with the IWER Quest 3 emulator: enter, stick walk, smooth turn, physical walk into a wall (stopped), flashlight.
