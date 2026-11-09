@@ -351,3 +351,60 @@ export function makeReticleMaterial() {
     transparent: true, depthWrite: false,
   });
 }
+
+// ---- the bottomless shaft (render/abyss.js): light dies off with depth, surfaces sink into black,
+// lamps fade slower than walls so they recede long after the walls are gone
+export const ABYSS_VERT = VERT;
+export const ABYSS_FRAG = /* glsl */`
+precision highp sampler2DArray;
+uniform sampler2DArray uAlb, uNrm;
+uniform float uTop, uFall, uLampTop, uLampStep, uR;
+uniform vec2 uC;
+uniform vec3 uTopLight, uLampCol;
+varying vec3 vPos; varying vec3 vN; varying vec2 vUv; flat varying float vLayer; varying vec3 vTint; varying float vEmit;
+${COMMON}
+void main(){
+  vec4 A = texture(uAlb, vec3(vUv, vLayer));
+  vec4 Nt = texture(uNrm, vec3(vUv, vLayer));
+  vec3 albedo = A.rgb * mix(vec3(1.0), vTint, Nt.b);
+  vec3 N = normalize(vN), V = normalize(cameraPosition - vPos);
+  float depth = max(uTop - vPos.y, 0.0);
+  // what the bake left at the top, falling off with depth (light from far above, faint bounce)
+  vec3 E = uTopLight * (exp(-depth / uFall) * 0.85 + exp(-depth / (uFall * 4.0)) * 0.15);
+  float dist = length(cameraPosition - vPos);
+  // the gloom: what light comes from above dies in the dust
+  float gloom = 1.0 - exp(-depth * 0.03 - dist * 0.004);
+  vec3 col = (albedo * E + dynLights(vPos, N, V, albedo, vec3(0.04), 0.6)) * (1.0 - gloom);
+  // each warning-lamp level lights a red band of wall round it (ring light), seen through the haze
+  float yl = min(uLampTop, uLampTop - uLampStep * floor((uLampTop - vPos.y) / uLampStep + 0.5));
+  float dy = vPos.y - yl, dr = uR - length(vPos.xz - uC);
+  vec3 ring = uLampCol / (0.5 + dy * dy + dr * dr * 0.8);
+  col += albedo * ring * exp(-dist * 0.012);
+  // lamps: emissive, seen through the dark much further
+  col += A.rgb * vTint * vEmit * exp(-dist / 140.0);
+  gl_FragColor = vec4(finish(col), 1.0);
+}`;
+// lamp halos: additive points, a fixed world size but never under 1.5 px, so levels recede for ever
+export function makeHaloMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...U, uSize: { value: 1.6 } },
+    vertexShader: /* glsl */`
+      uniform vec2 uRes; uniform float uSize; varying float vK;
+      void main(){
+        vec4 mv = viewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float px = uSize * projectionMatrix[1][1] * uRes.y * 0.5 / max(-mv.z, 0.1);
+        gl_PointSize = max(px, 1.5);
+        vK = exp(-(-mv.z) / 160.0) * min(1.0, px / 1.5);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform float uExposure; varying float vK;
+      void main(){
+        vec2 c = gl_PointCoord * 2.0 - 1.0; float r2 = dot(c, c);
+        if (r2 > 1.0) discard;
+        vec3 col = vec3(1.0, 0.16, 0.06) * (exp(-r2 * 14.0) * 1.6 + exp(-r2 * 3.5) * 0.25) * vK * uExposure;
+        gl_FragColor = vec4(1.0 - exp(-col), 0.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+}

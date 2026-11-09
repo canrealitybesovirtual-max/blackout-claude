@@ -6,6 +6,7 @@ import { buildZone, buildPrims, faceTexel } from './build.js';
 import { Grid, F_SHOOT } from './grid.js';
 import { sectorHash, decodeZoneBake, LM_DENSITY } from './sector.js';
 import { makeWorldMaterial, makeDecalMaterial, makeGlowMaterial } from '../render/shaders.js';
+import { buildAbyss } from '../render/abyss.js';
 
 const IDB = 'blacksite-bake';
 function idb() { return new Promise((res) => { try { const r = indexedDB.open(IDB, 1); r.onupgradeneeded = () => r.result.createObjectStore('lm'); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (e) { res(null); } }); }
@@ -117,8 +118,22 @@ export class ZoneManager {
       glow = new THREE.Mesh(gg, makeGlowMaterial()); glow.matrixAutoUpdate = false; glow.renderOrder = 3; glow.frustumCulled = true;
     }
 
-    const rz = { id, z, bz, mesh, decals, glow, tex, lm, mat, dmat, visible: false, glowVis: new Float32Array(32).fill(0) };
-    this.o.scene.add(mesh); this.o.scene.add(decals); if (glow) this.o.scene.add(glow);
+    // bottomless shaft below the baked one, lit from where the bake leaves off
+    let abyss = null;
+    if (z.abyss) {
+      const ci = z.cyls.findIndex(c => c.inward && c.r === z.abyss.r && Math.min(c.a[1], c.b[1]) === z.abyss.top);
+      const top = [0, 0, 0];
+      if (ci >= 0 && bz.cylRect[ci] >= 0) {
+        const r = bz.rects[bz.cylRect[ci]], d = lm.lm[0];
+        for (let k = 0; k < r.nx; k++) {
+          const i = ((r.y + 1) * lm.W + r.x + 1 + k) * 4;
+          for (let q = 0; q < 3; q++) { const v = d[i + q] / 255 * d[i + 3] / 255 * 4; top[q] += v * v / r.nx; }
+        }
+      }
+      abyss = buildAbyss(this.o.arrays, z.abyss, top);
+    }
+    const rz = { id, z, bz, mesh, decals, glow, abyss, tex, lm, mat, dmat, visible: false, glowVis: new Float32Array(32).fill(0) };
+    this.o.scene.add(mesh); this.o.scene.add(decals); if (glow) this.o.scene.add(glow); if (abyss) this.o.scene.add(abyss);
     this.loaded.set(id, rz);
     this.loading.delete(id);
     this.o.audio && this.o.audio.addEmitters(id, z.emitters);
@@ -133,6 +148,7 @@ export class ZoneManager {
     const rz = this.loaded.get(id); if (!rz) return;
     this.o.scene.remove(rz.mesh, rz.decals); if (rz.glow) { this.o.scene.remove(rz.glow); rz.glow.geometry.dispose(); rz.glow.material.dispose(); }
     rz.mesh.geometry.dispose(); rz.mat.dispose(); rz.decals.geometry.dispose(); rz.dmat.dispose();
+    if (rz.abyss) { this.o.scene.remove(rz.abyss); rz.abyss.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
     for (const t of new Set(Object.values(rz.tex))) t.dispose();
     this.o.perf.texBytes -= rz.lm.W * rz.lm.H * 4 * 2 * rz.lm.states;
     this.o.audio && this.o.audio.removeEmitters(id);
@@ -192,7 +208,7 @@ export class ZoneManager {
       }
       // standing inside a doorway: draw both sides
       if (!vis && !this.zoneAt(p)) vis = true;
-      rz.visible = vis; rz.mesh.visible = rz.decals.visible = vis; if (rz.glow) rz.glow.visible = vis;
+      rz.visible = vis; rz.mesh.visible = rz.decals.visible = vis; if (rz.glow) rz.glow.visible = vis; if (rz.abyss) rz.abyss.visible = vis;
       if (vis) calls++;
     }
     this.o.perf.counters.zones = `${this.loaded.size} loaded / ${calls} drawn`;

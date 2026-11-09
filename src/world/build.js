@@ -113,15 +113,17 @@ export function buildZone(z, neighbors, opts = {}) {
     const d0 = [c.b[0] - c.a[0], c.b[1] - c.a[1], c.b[2] - c.a[2]], len = len3(d0), d = norm3(d0);
     const ref = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
     const e1 = norm3(cross3(d, ref)), e2 = cross3(d, e1);
-    const S = CYL_SIDES, L = Math.max(1, Math.ceil(len / 0.6));
+    // sides / arc / inward: shafts are big inside-facing cylinders, optionally with a gap (a doorway)
+    const S = c.sides || CYL_SIDES, L = Math.max(1, Math.ceil(len / (c.seg || 0.6)));
+    const t0 = c.arc ? c.arc[0] : 0, t1 = c.arc ? c.arc[1] : 2 * Math.PI, sg = c.inward ? -1 : 1;
     const pts = new Float32Array((S + 1) * (L + 1) * 3), nrm = new Float32Array((S + 1) * (L + 1) * 3);
     for (let m = 0; m <= L; m++) for (let k = 0; k <= S; k++) {
-      const th = 2 * Math.PI * k / S, cs = Math.cos(th), sn = Math.sin(th), q = (m * (S + 1) + k) * 3;
+      const th = t0 + (t1 - t0) * k / S, cs = Math.cos(th), sn = Math.sin(th), q = (m * (S + 1) + k) * 3;
       const nn = [cs * e1[0] + sn * e2[0], cs * e1[1] + sn * e2[1], cs * e1[2] + sn * e2[2]];
-      for (let j = 0; j < 3; j++) { nrm[q + j] = nn[j]; pts[q + j] = c.a[j] + d[j] * len * m / L + c.r * nn[j]; }
+      for (let j = 0; j < 3; j++) { nrm[q + j] = nn[j] * sg; pts[q + j] = c.a[j] + d[j] * len * m / L + c.r * nn[j]; }
     }
     cylRect[ci] = rects.length;
-    rects.push({ kind: 1, nx: S + 1, ny: L + 1, pts, nrm, albedo: matAlbedo(c.mat), cyl: ci, len, S, L, x: 0, y: 0 });
+    rects.push({ kind: 1, nx: S + 1, ny: L + 1, pts, nrm, albedo: matAlbedo(c.mat), cyl: ci, len, S, L, t0, t1, d, x: 0, y: 0 });
   });
 
   // shelf-pack charts (1 texel padding each side)
@@ -168,12 +170,12 @@ export function buildZone(z, neighbors, opts = {}) {
     for (let mm = 0; mm <= L; mm++) for (let k = 0; k <= S; k++) {
       const q = (mm * (S + 1) + k) * 3;
       g.v([r.pts[q], r.pts[q + 1], r.pts[q + 2]], [r.nrm[q], r.nrm[q + 1], r.nrm[q + 2]],
-        (k / S) * 2 * Math.PI * c.r * sc, r.len * (mm / L) * sc,
+        (r.t0 + (r.t1 - r.t0) * k / S) * c.r * sc, dot3([r.pts[q], r.pts[q + 1], r.pts[q + 2]], r.d) * sc, // v along the axis: co-axial pieces line up
         (r.x + 1 + k + 0.5) / W, (r.y + 1 + mm + 0.5) / H, m.layer, m.tint, 0);
     }
     for (let mm = 0; mm < L; mm++) for (let k = 0; k < S; k++) {
       const a = base + mm * (S + 1) + k, b = a + 1, cc = b + S + 1, d = a + S + 1;
-      g.idx.push(a, b, cc, a, cc, d);
+      if (c.inward) g.idx.push(a, cc, b, a, d, cc); else g.idx.push(a, b, cc, a, cc, d);
     }
   }
   const geo = g.finish();
@@ -251,7 +253,8 @@ export function buildPrims(built, doors, zoneIndexOf) {
     });
     bz.zone.cyls.forEach((c, i) => {
       const flags = (c.occlude ? F_OCCLUDE : 0) | (c.collide ? F_COLLIDE : 0) | F_SHOOT;
-      P.addCyl(c.a, c.b, c.r, flags, zi, i, MAT_INDEX[c.mat]);
+      const pi = P.addCyl(c.a, c.b, c.r, flags, zi, i, MAT_INDEX[c.mat]);
+      if (c.arc) { P.arc0[pi] = c.arc[0]; P.arc1[pi] = c.arc[1]; }
     });
   });
   for (const d of doors) {

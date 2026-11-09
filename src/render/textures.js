@@ -133,7 +133,7 @@ const GEN = {
     const ax = (fx + fy * flip) * 0.707, ay = (fx - fy * flip) * 0.707;
     const lozenge = 1 - sstep(0.0, 0.06, Math.abs(ay) * 2.6 + Math.abs(ax) * 0.55 - 0.15);
     const dirt = sstep(0.4, 0.8, fbm(u, v, 4, 4, 131)) * (1 - lozenge), rust = sstep(0.68, 0.82, fbm(u, v, 3, 4, 132));
-    const base = 0.45 + (vnoise(u, v, 64, 133) - 0.5) * 0.06;
+    const base = 0.32 + (vnoise(u, v, 64, 133) - 0.5) * 0.05;
     o.r = base * (1 - dirt * 0.6) * (1 - rust) + 0.3 * rust; o.g = base * (1 - dirt * 0.6) * (1 - rust) + 0.16 * rust; o.b = base * 1.02 * (1 - dirt * 0.6) * (1 - rust) + 0.09 * rust;
     o.h = lozenge * 0.8; o.ro = 0.42 - lozenge * 0.14 + dirt * 0.4 + rust * 0.35; o.me = (1 - dirt * 0.7) * (1 - rust); o.tm = 0;
   },
@@ -251,6 +251,8 @@ export function makeDecalAtlas(scale = 1) {
   sign('sign_blast', '#e0b21a', '#111111', [['BLAST DOOR B1', 0.34, 42], ['SEALED — DO NOT OPERATE', 0.72, 24]], { border: '#111' });
   sign('sign_lift', '#e8e6df', '#151515', [['SERVICE LIFT', 0.3, 36], ['OUT OF ORDER', 0.7, 32, '#a3170f']]);
   sign('sign_range', '#1d1f20', '#e8e6df', [['TEST LANE B-4', 0.27, 42], ['EYE AND EAR PROTECTION', 0.58, 28, '#e0b21a'], ['REQUIRED BEYOND THIS POINT', 0.82, 22]]);
+  sign('sign_silo', '#e0b21a', '#111111', [['SILO 7', 0.36, 40], ['LAUNCH CONTROL · SEALED', 0.76, 17]], { border: '#111' });
+  sign('sign_drop', '#e8e6df', '#151515', [['DANGER', 0.22, 30, '#f2f2f2'], ['OPEN SHAFT — 400 M DROP', 0.6, 22], ['KEEP TO THE GANTRY', 0.85, 16, '#6a1010']], { band: '#a3170f' });
   sign('sign_armorybig', '#e8e6df', '#151515', [['ARMORY', 0.45, 60], ['WEAPONS MUST BE CLEARED', 0.82, 22, '#a3170f']], { border: '#151515' });
   clip('firing_line', (w, h) => { g.fillStyle = '#e6e3da'; g.font = font(44); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('FIRING LINE', w / 2, h / 2 + 2); wear(w, h, 0.5, 2.5); });
   clip('stencil_b2', (w, h) => { g.fillStyle = '#e3e0d6'; g.font = font(150, 900); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('B2', w / 2, h / 2 + 8); g.fillStyle = 'rgba(0,0,0,1)'; g.globalCompositeOperation = 'destination-out'; g.fillRect(w * 0.47, 0, 8, h); g.fillRect(0, h * 0.48, w, 6); g.globalCompositeOperation = 'source-over'; wear(w, h, 0.9, 3); });

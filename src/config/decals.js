@@ -24,6 +24,8 @@ export const DECAL_CELLS = {
   stain_oil:     [128, 720, 256, 256],
   puddle:        [384, 720, 320, 200],
   scorch:        [704, 720, 320, 304],
+  sign_silo:     [832, 192, 192, 96],
+  sign_drop:     [800, 624, 224, 96],
 };
 export function cellUV(name) {
   const c = DECAL_CELLS[name];

@@ -15,7 +15,8 @@ export function zone(id, name, min, max, o = {}) {
     return z.boxes.length - 1;
   };
   z.pipe = (a, b, r, mat, opt = {}) => {
-    z.cyls.push({ a, b, r, mat, collide: opt.collide ?? false, occlude: opt.occlude ?? true });
+    z.cyls.push({ a, b, r, mat, collide: opt.collide ?? false, occlude: opt.occlude ?? true,
+      inward: opt.inward || false, sides: opt.sides, seg: opt.seg, arc: opt.arc });
     const fl = opt.flange;
     if (fl) {
       const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);

@@ -4,11 +4,12 @@
 import corridor from './zones/corridor.js';
 import armory from './zones/armory.js';
 import tunnel from './zones/tunnel.js';
+import silo from './zones/silo.js';
 
 export const BAKE_VERSION = 3;
 
 export function sectorB() {
-  const zones = [corridor(), armory(), tunnel()];
+  const zones = [corridor(), armory(), tunnel(), silo()];
   return {
     id: 'sectorB',
     zones,

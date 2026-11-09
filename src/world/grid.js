@@ -24,6 +24,8 @@ export class PrimSet {
     this.zone = re(Int16Array, 1, this.zone);   // index into the zone list of the owner
     this.local = re(Int32Array, 1, this.local); // box / cylinder index inside its zone
     this.sid = re(Int16Array, 1, this.sid);     // surface id (material lookup)
+    this.arc0 = re(Float32Array, 1, this.arc0); // vertical cylinders: solid angle range (default full)
+    this.arc1 = re(Float32Array, 1, this.arc1);
     this.cap = cap;
   }
   addBox(mn, mx, flags, zone, local, sid) {
@@ -42,7 +44,7 @@ export class PrimSet {
       this.ca[k + j] = a[j]; this.cb[k + j] = b[j];
       this.mn[k + j] = Math.min(a[j], b[j]) - r; this.mx[k + j] = Math.max(a[j], b[j]) + r;
     }
-    this.cr[i] = r;
+    this.cr[i] = r; this.arc0[i] = 0; this.arc1[i] = 7;
     return i;
   }
   setBox(i, mn, mx) {
@@ -136,14 +138,25 @@ export class Grid {
     let h = k1 * k1 - k2 * k0;
     if (h < 0) return -1;
     h = Math.sqrt(h);
-    const t = (-k1 - h) / k2;
-    if (t < 0 || t > tmax) return -1;
-    const y = baoc + t * bard;
-    if (y < 0 || y > baba) return -1;
+    // entry root, else the exit root (rays from inside a shaft); each must be on the body and in the arc
+    let t = -1, y = 0;
+    for (let s2 = -1; s2 <= 1; s2 += 2) {
+      const tt = (-k1 + s2 * h) / k2;
+      if (tt < 1e-4 || tt > tmax) continue;
+      const yy = baoc + tt * bard;
+      if (yy < 0 || yy > baba) continue;
+      if (P.arc1[i] < 6.3) { // gap: vertical axis, angle as the builder measures it
+        let th = Math.atan2(-(ox + dx * tt - ax), -(oz + dz * tt - az)); if (th < 0) th += 2 * Math.PI;
+        if (th < P.arc0[i] || th > P.arc1[i]) continue;
+      }
+      t = tt; y = yy; break;
+    }
+    if (t < 0) return -1;
     if (fill) {
       const s = y / baba;
       let nx = ocx + t * dx - bax * s, ny = ocy + t * dy - bay * s, nz = ocz + t * dz - baz * s;
-      const l = 1 / Math.max(1e-6, Math.hypot(nx, ny, nz));
+      let l = 1 / Math.max(1e-6, Math.hypot(nx, ny, nz));
+      if (nx * dx + ny * dy + nz * dz > 0) l = -l; // face the ray (inside a shaft)
       this.hit.face = 6; this.hit.nx = nx * l; this.hit.ny = ny * l; this.hit.nz = nz * l;
     }
     return t;

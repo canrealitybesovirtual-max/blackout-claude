@@ -125,7 +125,7 @@ export class AudioEngine {
       this.ambKind = ambience;
       for (const k in this.loops) this.loops[k].g.gain.setTargetAtTime(0, t, 0.8);
       if (!this.loops[ambience]) this.loops[ambience] = this._loop(ambience, this.amb, 0);
-      this.loops[ambience].g.gain.setTargetAtTime(ambience === 'tunnel' ? 0.55 : 0.4, t, 0.8);
+      this.loops[ambience].g.gain.setTargetAtTime(ambience === 'silo' ? 0.75 : ambience === 'tunnel' ? 0.55 : 0.4, t, 0.8);
     }
   }
   _loop(name, dest, gain, pos) {
@@ -148,7 +148,7 @@ export class AudioEngine {
     if (!this.ready) { this._pendingEm = (this._pendingEm || []).concat(list.map(e => ({ ...e, zoneId }))); return; }
     for (const e of list) {
       const em = { ...e, zoneId, next: 1 + Math.random() * 3 };
-      if (e.kind !== 'drip') em.loop = this._loop(e.kind, this.sfx, e.gain, e.pos);
+      if (e.kind !== 'drip' && e.kind !== 'groan') em.loop = this._loop(e.kind, this.sfx, e.gain, e.pos);
       this.emitters.push(em);
     }
   }
@@ -166,7 +166,10 @@ export class AudioEngine {
     for (const e of this.emitters) {
       if (e.loop) { e.loop.g.gain.setTargetAtTime(e.gain * (0.3 + 0.7 * this.occlusion(e.pos)), t, 0.2); continue; }
       e.next -= dt;
-      if (e.next <= 0) { e.next = 1.2 + Math.random() * 4; this.play3D('drip', e.pos, { gain: e.gain, maxDist: 18, send: 0.5, pri: 0 }); }
+      if (e.next <= 0) {
+        if (e.kind === 'groan') { e.next = 9 + Math.random() * 16; this.play3D('groan', e.pos, { gain: e.gain, maxDist: 160, send: 0.9, pri: 0, rate: 0.85 + Math.random() * 0.3 }); }
+        else { e.next = 1.2 + Math.random() * 4; this.play3D('drip', e.pos, { gain: e.gain, maxDist: 40, send: 0.6, pri: 0 }); }
+      }
     }
     this.breath.g.gain.setTargetAtTime(fatigue * 0.35, t, 0.5);
     this.nextBoom -= dt;
@@ -266,6 +269,15 @@ export class AudioEngine {
       const r = mkRng(seed + 99 + c); for (const at of er) { const k = Math.round((at + Math.abs(r()) * 0.002) * sr); if (k < n) d[k] += 0.6 * Math.sign(r()); }
       norm(d, 0.6);
     }, 2);
-    this.ir = { corridor: ir(1.35, 3500, 0.004, [0.006, 0.011, 0.019, 0.028, 0.041], 191), armory: ir(1.0, 4500, 0.006, [0.012, 0.021, 0.034, 0.047], 201), tunnel: ir(1.9, 2200, 0.003, [0.005, 0.009, 0.014, 0.022, 0.031, 0.044], 211) };
+    B.silo = [bed(8, 221, (d, n) => { lp(d, 70, sr); const w = noise(n, 222); bp(w, 420, 2.2, sr); const w2 = noise(n, 223); bp(w2, 760, 3, sr);
+      for (let i = 0; i < n; i++) { const t = i / sr; d[i] = d[i] * 6 + w[i] * 0.07 * (0.55 + 0.45 * Math.sin(TAU * t / 8 * 3 + 1)) + w2[i] * 0.035 * (0.5 + 0.5 * Math.sin(TAU * t / 8 * 2)); } })];
+    // far-off metal groan from deep down the shaft (stress in the structure)
+    B.groan = [1, 2, 3].map(s => mk(3.2, d => { const n = d.length; let p = 0, p2 = 0;
+      const x = noise(n, 230 + s); lp(x, 900, sr);
+      for (let i = 0; i < n; i++) { const t = i / sr, e = Math.sin(Math.PI * Math.min(1, t / 3.0)) ** 2;
+        const f = 52 + s * 9 + 14 * Math.sin(t * 1.7 + s) + 6 * Math.sin(t * 7.3); p += TAU * f / sr; p2 += TAU * f * 2.71 / sr;
+        d[i] = (Math.sin(p + 0.8 * Math.sin(p * 0.5)) * 0.6 + Math.sin(p2) * 0.25 + x[i] * 0.4 * (0.5 + 0.5 * Math.sin(t * 23))) * e; }
+      bp(d, 180, 0.7, sr); norm(d, 0.8); }));
+    this.ir = { silo: ir(4.6, 1600, 0.012, [0.035, 0.07, 0.11, 0.16, 0.24], 241), corridor: ir(1.35, 3500, 0.004, [0.006, 0.011, 0.019, 0.028, 0.041], 191), armory: ir(1.0, 4500, 0.006, [0.012, 0.021, 0.034, 0.047], 201), tunnel: ir(1.9, 2200, 0.003, [0.005, 0.009, 0.014, 0.022, 0.031, 0.044], 211) };
   }
 }

@@ -12,6 +12,7 @@ import { AudioEngine } from './audio/audio.js';
 import { Player } from './game/player.js';
 import { Effects } from './game/effects.js';
 import { WeaponSystem, impactClass } from './game/weapon.js';
+import { Hands } from './game/hands.js';
 import { SlidingDoor, Targets } from './game/props.js';
 
 const $ = id => document.getElementById(id);
@@ -78,11 +79,12 @@ async function boot() {
   let fogTarget = z0.fogDensity; U.uFogDensity.value = fogTarget; U.uFogColor.value.setRGB(...z0.fog);
 
   let muzzleT = 0; const muzzlePos = new THREE.Vector3();
-  const weapons = new WeaponSystem(arrays, {
+  // guns stay off until the user's own GLB weapons go in (?guns=on = the placeholder set)
+  const weapons = params.get('guns') === 'on' ? new WeaponSystem(arrays, {
     zm, player, effects, audio, targets,
     flashLight: p => { muzzlePos.copy(p); muzzleT = 0.06; },
     onShot: (o, d, w) => shoot(o, d, w),
-  });
+  }) : new Hands(audio);
 
   // ---- hitscan ----
   function shoot(o, d) {
@@ -168,8 +170,11 @@ async function boot() {
   function toast(txt) { $('toast').textContent = txt; $('toast').style.opacity = 1; toastT = 3.5; }
   function hud(dt) {
     const a = weapons.ammoText();
+    $('ammo').style.display = a ? '' : 'none';
+    if (a) {
     $('ammo').innerHTML = `<b>${a.inMag}</b><span>/ ${a.reserve}</span><i>${a.name} · ${a.mode}</i>`;
     $('ammo').classList.toggle('low', a.inMag <= Math.ceil(weapons.def.cap * 0.2));
+    }
     $('xhair').style.opacity = weapons.ads > 0.3 || player.sprinting ? 0 : 0.85;
     const pr = interactPrompt();
     $('prompt').textContent = pr ? `[${input.device === 'pad' ? 'RB' : input.device === 'touch' ? 'USE' : 'E'}] ${pr}` : '';
@@ -276,7 +281,7 @@ async function boot() {
     // dynamic lights: rail flashlight + muzzle flash
     let n = 0;
     if (weapons.flashOn) {
-      weapons.lightPose(lp, ld);
+      weapons.lightPose(lp, ld, camera);
       U.uDynPos.value[n].set(lp.x, lp.y, lp.z, 28); U.uDynCol.value[n].set(42, 40, 36, 1); U.uDynDir.value[n].set(ld.x, ld.y, ld.z, Math.cos(0.42)); n++;
     }
     muzzleT -= dt;
@@ -292,8 +297,7 @@ async function boot() {
     renderer.setRenderTarget(null);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
-    renderer.clearDepth();
-    renderer.render(weapons.scene, weapons.cam);
+    if (weapons.scene) { renderer.clearDepth(); renderer.render(weapons.scene, weapons.cam); }
     perf.endGPU();
     const total = performance.now() - c0;
     perf.time('render', total - cpu);
