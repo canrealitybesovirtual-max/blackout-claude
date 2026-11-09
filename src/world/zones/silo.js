@@ -9,10 +9,10 @@ const SODIUM = [1.0, 0.63, 0.32], COOL = [0.9, 0.97, 1.0];
 export default function silo() {
   const { c: [cx, cz], r: R } = SILO;
   const z = zone('silo', 'SILO 7 — LAUNCH SHAFT', [-R, SILO.base, 50.15], [R, SILO.top, cz + R], {
-    neighbors: ['tunnel'], reverb: 'silo', ambience: 'silo', fog: [0.008, 0.009, 0.011], fogDensity: 0.012,
+    neighbors: ['tunnel'], reverb: 'silo', ambience: 'silo', fog: [0.004, 0.0045, 0.005], fogDensity: 0.03,
   });
   z.portals.push({ to: 'tunnel', min: [-0.8, 0, 50.0], max: [0.52, 2.4, 50.3] });
-  z.abyss = { c: [cx, cz], r: R, top: SILO.base, depth: 320, sides: 56, mat: 'concDark' };
+  z.abyss = { c: [cx, cz], r: R, top: SILO.base, depth: 320, sides: 56, mat: 'concSilo' };
 
   // ---- passage from the tunnel (blast-door frame at the shaft end)
   z.box([-1.1, -0.3, 50.15], [1.1, 0, 53.6], 'plate');
@@ -34,9 +34,9 @@ export default function silo() {
 
   // ---- shaft wall: full ring below the deck, a doorway gap at the passage, full ring above it
   const gap = Math.asin(1.1 / R);
-  z.pipe([cx, SILO.base, cz], [cx, 0, cz], R, 'concDark', { inward: true, sides: 56, seg: 0.5, collide: false });
-  z.pipe([cx, 0, cz], [cx, 2.7, cz], R, 'concDark', { inward: true, sides: 56, seg: 0.45, arc: [gap, 2 * Math.PI - gap], collide: false });
-  z.pipe([cx, 2.7, cz], [cx, SILO.top, cz], R, 'concDark', { inward: true, sides: 56, seg: 0.5, collide: false });
+  z.pipe([cx, SILO.base, cz], [cx, 0, cz], R, 'concSilo', { inward: true, sides: 56, seg: 0.5, collide: false });
+  z.pipe([cx, 0, cz], [cx, 2.7, cz], R, 'concSilo', { inward: true, sides: 56, seg: 0.45, arc: [gap, 2 * Math.PI - gap], collide: false });
+  z.pipe([cx, 2.7, cz], [cx, SILO.top, cz], R, 'concSilo', { inward: true, sides: 56, seg: 0.5, collide: false });
   // closed silo lid overhead, seam down the middle
   z.box([-R - 0.4, SILO.top, cz - R - 0.4], [-0.01, SILO.top + 0.6, cz + R + 0.4], 'steelDark');
   z.box([0.01, SILO.top, cz - R - 0.4], [R + 0.4, SILO.top + 0.6, cz + R + 0.4], 'steelDark');
@@ -83,7 +83,25 @@ export default function silo() {
   z.box([1.035, 1.115, 64.855], [1.215, 1.385, 64.92], 'steelDark', { collide: false, occlude: false });
 
   // ---- light: work lights under the lid, floods under the decks (they light the drop), wall bulkheads
-  for (const [x, zz] of [[-3.2, cz], [3.2, cz], [0, cz - 3.4], [0, cz + 3.4]]) z.light(x, SILO.top, zz, { axis: 'z', color: COOL, power: 115, drop: 0.5, housing: 'steelDark' });
+  // two weak work lights hang far down from the lid (the lid itself stays in the dark)
+  for (const [x, zz] of [[-3.2, cz], [3.2, cz]]) z.light(x, SILO.top, zz, { axis: 'z', color: COOL, power: 38, drop: 4.5, housing: 'steelDark' });
+  // shaft wall: steel bands at the lift seams, water and rust run down from each band and under the lamps
+  for (const y of [4.6, 7.4, 10.2, -3.0, -6.5, -10.0]) {
+    z.pipe([cx, y, cz], [cx, y + 0.22, cz], R - 0.05, 'steelDark', { inward: true, sides: 56, collide: false, occlude: false });
+  }
+  let sd = 11; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) {
+    const a = rnd() * Math.PI * 2, nx = -Math.cos(a), nz = -Math.sin(a);
+    const top = [10.2, 7.4, 4.6, 2.65][Math.floor(rnd() * 4)], len = 1.6 + rnd() * 3.5;
+    const px = cx + Math.cos(a) * (R - 0.012), pz = cz + Math.sin(a) * (R - 0.012);
+    z.decal([px, top - len / 2, pz], [nx, 0, nz], 0.35 + rnd() * 0.5, len, 'stain_water', { wet: 0.35, alpha: 0.8 });
+  }
+  for (let i = 0; i < 18; i++) {   // soot / grime bands low on the wall above the deck and round the passage
+    const a = i / 18 * Math.PI * 2 + 0.1;
+    if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a)) + Math.PI / 2) < 0.35) continue;    // not across the passage doorway
+    const px = cx + Math.cos(a) * (R - 0.012), pz = cz + Math.sin(a) * (R - 0.012);
+    z.decal([px, 0.3, pz], [-Math.cos(a), 0, -Math.sin(a)], 2.0, 0.6, 'grime', { alpha: 0.9 });
+  }
   for (const zz of [54.2, 59.3, 64.4]) z.light(0, -0.25, zz, { len: 0.5, wid: 0.3, color: COOL, power: 70, housing: 'steelDark', depth: 0.1 });
   for (const ph of [0.55, 2.6, 3.7, 5.75]) {
     const lx = cx + Math.cos(ph) * (R - 0.45), lz = cz + Math.sin(ph) * (R - 0.45);

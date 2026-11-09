@@ -55,6 +55,7 @@ export const MATERIALS = {
   fabricOlive:{ layer: 11, tint: [0.36, 0.38, 0.27],scale: 0.6, step: 'concrete', impact: 'soft' },
   rubberTrap: { layer: 11, tint: [0.09, 0.09, 0.09],scale: 0.8, step: 'concrete', impact: 'soft' },
   plate:      { layer: 12, tint: [1, 1, 1],         scale: 1.0, step: 'metal', impact: 'metal' },
+  concSilo:   { layer: 2, tint: [0.36, 0.345, 0.32], scale: 1.3, step: 'concrete', impact: 'concrete' },   // shaft: damp, sooted
 };
 
 // two-tone wall: lower band + upper paint split at h metres (vertical faces only)
