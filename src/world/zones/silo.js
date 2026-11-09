@@ -3,7 +3,7 @@
 // and warning lamps receding, so the bottom is never seen. Shaft axis x 0, z 59.3, radius 6.
 import { zone } from '../kit.js';
 
-export const SILO = { c: [0, 59.3], r: 6, top: 12, base: -14 };
+export const SILO = { c: [0, 59.3], r: 6, top: 40, base: -14 };   // the lid is far beyond the flashlight's reach
 const SODIUM = [1.0, 0.63, 0.32], COOL = [0.9, 0.97, 1.0];
 
 export default function silo() {
@@ -84,10 +84,9 @@ export default function silo() {
   z.box([1.035, 1.115, 64.855], [1.215, 1.385, 64.92], 'steelDark', { collide: false, occlude: false });
 
   // ---- light: work lights under the lid, floods under the decks (they light the drop), wall bulkheads
-  // two weak work lights hang far down from the lid (the lid itself stays in the dark)
-  for (const [x, zz] of [[-3.2, cz], [3.2, cz]]) z.light(x, SILO.top, zz, { axis: 'z', color: COOL, power: 38, drop: 4.5, housing: 'steelDark' });
+  // no lights up the shaft: it climbs into the dark
   // shaft wall: steel bands at the lift seams, water and rust run down from each band and under the lamps
-  for (const y of [4.6, 7.4, 10.2, -3.0, -6.5, -10.0]) {
+  for (const y of [4.6, 7.4, 10.2, 13.0, 15.8, 18.6, 21.4, 24.2, 27.0, -3.0, -6.5, -10.0]) {
     z.pipe([cx, y, cz], [cx, y + 0.22, cz], R - 0.05, 'steelDark', { inward: true, sides: 56, collide: false, occlude: false });
   }
   let sd = 11; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
