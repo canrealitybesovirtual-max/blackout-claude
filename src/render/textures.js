@@ -2,7 +2,7 @@
 // Generated at load: no texture downloads, size chosen by the quality profile.
 import * as THREE from 'three';
 import { LAYERS } from '../config/materials.js';
-import { DECAL_CELLS, DECAL_ATLAS } from '../config/decals.js';
+import { DECAL_CELLS, DECAL_ATLAS, DECAL_ATLAS_H } from '../config/decals.js';
 
 // ---------- tileable value noise ----------
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -218,8 +218,8 @@ export function makeMaterialArrays(size, anisotropy = 1, photos = {}) {
 
 // ---------- decal atlas (canvas) ----------
 export function makeDecalAtlas(scale = 1, photos = {}) {
-  const S = Math.round(DECAL_ATLAS * scale), cv = document.createElement('canvas');
-  cv.width = cv.height = S;
+  const S = Math.round(DECAL_ATLAS * scale), SH = Math.round(DECAL_ATLAS_H * scale), cv = document.createElement('canvas');
+  cv.width = S; cv.height = SH;
   const g = cv.getContext('2d');
   g.scale(scale, scale);
   const r = rng(77);
@@ -251,12 +251,13 @@ export function makeDecalAtlas(scale = 1, photos = {}) {
   sign('sign_blast', '#e0b21a', '#111111', [['BLAST DOOR B1', 0.34, 42], ['SEALED — DO NOT OPERATE', 0.72, 24]], { border: '#111' });
   sign('sign_lift', '#e8e6df', '#151515', [['SERVICE LIFT', 0.3, 36], ['OUT OF ORDER', 0.7, 32, '#a3170f']]);
   sign('sign_range', '#1d1f20', '#e8e6df', [['TEST LANE B-4', 0.27, 42], ['EYE AND EAR PROTECTION', 0.58, 28, '#e0b21a'], ['REQUIRED BEYOND THIS POINT', 0.82, 22]]);
-  sign('sign_silo', '#e0b21a', '#111111', [['SILO 7', 0.36, 40], ['LAUNCH CONTROL · SEALED', 0.76, 17]], { border: '#111' });
+  sign('sign_silo', '#1d1f20', '#e0b21a', [['SILO 7', 0.36, 40], ['LAUNCH CONTROL · SEALED', 0.76, 17, '#e8e6df']]);
   sign('sign_drop', '#e8e6df', '#151515', [['DANGER', 0.22, 30, '#f2f2f2'], ['OPEN SHAFT — 400 M DROP', 0.6, 22], ['KEEP TO THE GANTRY', 0.85, 16, '#6a1010']], { band: '#a3170f' });
   sign('sign_armorybig', '#e8e6df', '#151515', [['ARMORY', 0.45, 60], ['WEAPONS MUST BE CLEARED', 0.82, 22, '#a3170f']], { border: '#151515' });
   clip('firing_line', (w, h) => { g.fillStyle = '#e6e3da'; g.font = font(44); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('FIRING LINE', w / 2, h / 2 + 2); wear(w, h, 0.5, 2.5); });
   clip('stencil_b2', (w, h) => { g.fillStyle = '#e3e0d6'; g.font = font(150, 900); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('B2', w / 2, h / 2 + 8); g.fillStyle = 'rgba(0,0,0,1)'; g.globalCompositeOperation = 'destination-out'; g.fillRect(w * 0.47, 0, 8, h); g.fillRect(0, h * 0.48, w, 6); g.globalCompositeOperation = 'source-over'; wear(w, h, 0.9, 3); });
   clip('locker_vent', (w, h) => { for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(0,0,0,0.85)'; g.fillRect(10 + i * 19, 10, 9, h - 20); } });
+  if (photos.door_yellow) clip('door_yellow', (w, h) => g.drawImage(photos.door_yellow, 0, 0, w, h));
   if (photos.vent) clip('vent', (w, h) => g.drawImage(photos.vent, 0, 0, w, h)); else
   clip('vent', (w, h) => { g.fillStyle = '#585b5c'; g.fillRect(2, 2, w - 4, h - 4); g.fillStyle = '#121314'; for (let i = 0; i < 9; i++) g.fillRect(10, 10 + i * 12, w - 20, 7); g.strokeStyle = '#2a2c2d'; g.lineWidth = 4; g.strokeRect(4, 4, w - 8, h - 8); });
   clip('grime', (w, h) => { const gr = g.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, 'rgba(22,19,15,0.75)'); gr.addColorStop(0.35, 'rgba(26,22,17,0.35)'); gr.addColorStop(1, 'rgba(30,26,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(20,17,13,${r() * 0.25})`; g.fillRect(r() * w, h * (0.4 + r() * 0.6), 1 + r() * 6, r() * h * 0.5); } });
@@ -272,7 +273,7 @@ export function makeDecalAtlas(scale = 1, photos = {}) {
   const t = new THREE.CanvasTexture(cv);
   t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
-  return { texture: t, bytes: S * S * 4 * 4 / 3 };
+  return { texture: t, bytes: S * SH * 4 * 4 / 3 };
 }
 
 // photo decals (null when missing: the drawn version is used)

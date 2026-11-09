@@ -41,7 +41,7 @@ async function boot() {
   const photos = await loadPhotoLayers(Q.tex);
   const arrays = makeMaterialArrays(Q.tex, Q.aniso, photos);
   perf.notes.photos = Object.keys(photos).join(', ') || 'none';
-  const atlas = makeDecalAtlas(Q.decalScale, { vent: await loadImage('textures/vent.webp') });
+  const atlas = makeDecalAtlas(Q.decalScale, { vent: await loadImage('textures/vent.webp'), door_yellow: await loadImage('textures/door_yellow.webp') });
   perf.texBytes += arrays.bytes + atlas.bytes;
   perf.notes.materials = `${(performance.now() - t).toFixed(0)} ms (${Q.tex}px x13 layers)`;
   U.uGrain.value = Q.grain; U.uVignette.value = Q.vignette;

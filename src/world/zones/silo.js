@@ -72,7 +72,7 @@ export default function silo() {
   z.box([-1.25, 0, 64.92], [-1.0, 2.65, 65.4], 'hazard');
   z.box([1.0, 0, 64.92], [1.25, 2.65, 65.4], 'hazard');
   z.box([-1.25, 2.4, 64.92], [1.25, 2.65, 65.4], 'hazard');
-  for (const y of [0.75, 1.65]) z.box([-0.85, y, 64.92], [0.85, y + 0.1, 65.0], 'steelDark');
+  z.decal([0, 1.2, 64.999], [0, 0, -1], 2.0, 2.4, 'door_yellow');   // photo: scratched yellow steel (drawn first: the sign sits on it)
   z.decal([0, 2.05, 64.999], [0, 0, -1], 1.1, 0.48, 'sign_silo');
 
   // ---- light: work lights under the lid, floods under the decks (they light the drop), wall bulkheads

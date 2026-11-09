@@ -1,5 +1,6 @@
 // Decal atlas layout (1024 x 1024 px, top-left origin). Pure data shared with the builder.
-export const DECAL_ATLAS = 1024;
+export const DECAL_ATLAS = 1024;      // width
+export const DECAL_ATLAS_H = 1536;    // height: rows past 1024 hold photo decals
 export const DECAL_CELLS = {
   line:          [0, 0, 32, 256],
   hazardFloor:   [32, 0, 224, 224],
@@ -26,10 +27,11 @@ export const DECAL_CELLS = {
   scorch:        [704, 720, 320, 304],
   sign_silo:     [832, 192, 192, 96],
   sign_drop:     [800, 624, 224, 96],
+  door_yellow:   [0, 1024, 416, 500],
 };
 export function cellUV(name) {
   const c = DECAL_CELLS[name];
   if (!c) throw new Error('Unknown decal ' + name);
-  const s = 1 / DECAL_ATLAS, e = 0.5 * s; // half-texel inset against bleeding
-  return [c[0] * s + e, c[1] * s + e, (c[0] + c[2]) * s - e, (c[1] + c[3]) * s - e];
+  const s = 1 / DECAL_ATLAS, t = 1 / DECAL_ATLAS_H; // half-texel inset against bleeding
+  return [c[0] * s + 0.5 * s, c[1] * t + 0.5 * t, (c[0] + c[2]) * s - 0.5 * s, (c[1] + c[3]) * t - 0.5 * t];
 }
