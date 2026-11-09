@@ -123,7 +123,7 @@ export function buildZone(z, neighbors, opts = {}) {
       for (let j = 0; j < 3; j++) { nrm[q + j] = nn[j] * sg; pts[q + j] = c.a[j] + d[j] * len * m / L + c.r * nn[j]; }
     }
     cylRect[ci] = rects.length;
-    rects.push({ kind: 1, nx: S + 1, ny: L + 1, pts, nrm, albedo: matAlbedo(c.mat), cyl: ci, len, S, L, t0, t1, d, x: 0, y: 0 });
+    rects.push({ kind: 1, nx: S + 1, ny: L + 1, pts, nrm, albedo: c.emit ? [0, 0, 0] : matAlbedo(c.mat), cyl: ci, len, S, L, t0, t1, d, x: 0, y: 0 });
   });
 
   // shelf-pack charts (1 texel padding each side)
@@ -171,7 +171,7 @@ export function buildZone(z, neighbors, opts = {}) {
       const q = (mm * (S + 1) + k) * 3;
       g.v([r.pts[q], r.pts[q + 1], r.pts[q + 2]], [r.nrm[q], r.nrm[q + 1], r.nrm[q + 2]],
         (r.t0 + (r.t1 - r.t0) * k / S) * c.r * sc, dot3([r.pts[q], r.pts[q + 1], r.pts[q + 2]], r.d) * sc, // v along the axis: co-axial pieces line up
-        (r.x + 1 + k + 0.5) / W, (r.y + 1 + mm + 0.5) / H, m.layer, m.tint, 0);
+        (r.x + 1 + k + 0.5) / W, (r.y + 1 + mm + 0.5) / H, m.layer, c.emit ? c.emit.color : m.tint, c.emit ? c.emit.power : 0);
     }
     for (let mm = 0; mm < L; mm++) for (let k = 0; k < S; k++) {
       const a = base + mm * (S + 1) + k, b = a + 1, cc = b + S + 1, d = a + S + 1;
@@ -208,7 +208,8 @@ export function buildZone(z, neighbors, opts = {}) {
   z.lights.forEach((L, i) => {
     for (const [cx2, cy2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
       gp.push(L.c[0], L.c[1] - 0.01, L.c[2]); gc.push(cx2, cy2);
-      gcol.push(L.color[0] * L.power, L.color[1] * L.power, L.color[2] * L.power);
+      const gpw = L.type === 'point' ? L.power * 14 : L.power; // a bare bulb glows hard for its output
+      gcol.push(L.color[0] * gpw, L.color[1] * gpw, L.color[2] * gpw);
       gs.push(Math.max(L.hx, L.hz) + 0.3, i);
     }
     gi.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);

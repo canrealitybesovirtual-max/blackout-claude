@@ -378,7 +378,14 @@ void main(){
   // each warning-lamp level lights a red band of wall round it (ring light), seen through the haze
   float yl = min(uLampTop, uLampTop - uLampStep * floor((uLampTop - vPos.y) / uLampStep + 0.5));
   float dy = vPos.y - yl, dr = uR - length(vPos.xz - uC);
-  vec3 ring = uLampCol / (0.5 + dy * dy + dr * dr * 0.8);
+  vec2 rel = vPos.xz - uC; float ph = atan(rel.y, rel.x);
+  float pool = 0.0;
+  for (int k = 0; k < 4; k++) {                       // lamps at 0.4 + 1.6 k rad
+    float a = ph - (0.4 + 1.6 * float(k)); a = mod(a + 3.14159265, 6.2831853) - 3.14159265;
+    float s = a * uR, d2 = s * s + dy * dy + dr * dr, h = 0.15 + dr;
+    pool += h / pow(d2 + 0.0225, 1.5);                 // grazing wash: bright at the cup, soft radial falloff
+  }
+  vec3 ring = uLampCol * (pool * 0.35 + 0.25 / (1.0 + dy * dy));
   col += albedo * ring * exp(-dist * 0.012);
   // lamps: emissive, seen through the dark much further
   col += A.rgb * vTint * vEmit * exp(-dist / 140.0);
@@ -402,7 +409,7 @@ export function makeHaloMaterial() {
       void main(){
         vec2 c = gl_PointCoord * 2.0 - 1.0; float r2 = dot(c, c);
         if (r2 > 1.0) discard;
-        vec3 col = vec3(1.0, 0.16, 0.06) * (exp(-r2 * 14.0) * 1.6 + exp(-r2 * 3.5) * 0.25) * vK * uExposure;
+        vec3 col = (vec3(1.0, 0.62, 0.5) * exp(-r2 * 40.0) * 2.2 + vec3(1.0, 0.14, 0.05) * (exp(-r2 * 10.0) * 1.2 + exp(-r2 * 3.0) * 0.3)) * vK * uExposure; // white-hot bulb, red wash
         gl_FragColor = vec4(1.0 - exp(-col), 0.0);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,

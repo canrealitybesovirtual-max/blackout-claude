@@ -228,7 +228,7 @@ export class ZoneManager {
         const lx = L[i].c[0], ly = L[i].c[1] - 0.03, lz = L[i].c[2];
         let dx = lx - c.x, dy = ly - c.y, dz = lz - c.z; const d = Math.hypot(dx, dy, dz); dx /= d; dy /= d; dz /= d;
         // fixtures face down: invisible from above their plane
-        const facing = Math.max(0, Math.min(1, -dy * 4 + 0.15));
+        const facing = L[i].wall ? 1 : Math.max(0, Math.min(1, -dy * 4 + 0.15));
         const blocked = this.grid.ray(c.x, c.y, c.z, dx, dy, dz, d - 0.05, F_SHOOT, true);
         rz.glowVis[i] = blocked ? 0 : facing;
         vis[i] += (rz.glowVis[i] - vis[i]) * 0.3;

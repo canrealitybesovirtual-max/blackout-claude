@@ -12,3 +12,6 @@
 | bark.jpg | yes | planned: outdoor trees |
 | pavers_moss.jpg | no; carries an environment-textures.com watermark | outdoor only after a licence check |
 Earlier batch (in chat, not saved yet): diamond plate, rusty blue double door, moss/dirt ground, ruined-wall and metal atlases.
+| ref_red_wall_lamp.jpg | reference | look of the silo red warning lamps (bulb in a red cup, radial wash) |
+| red_glass_cells.jpg / red_glass_rippled.jpg | not yet | planned: close-up red beacon / lamp lenses |
+| amber_fresnel_lens.jpg | not yet | planned: amber beacon / sodium bulkhead lenses |

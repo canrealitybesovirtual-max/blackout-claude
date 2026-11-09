@@ -25,6 +25,11 @@ export default function silo() {
   z.box([-0.8, 2.22, 53.2], [0.8, 2.4, 53.6], 'hazard');
   z.light(0, 2.7, 51.9, { len: 0.16, wid: 0.16, color: SODIUM, power: 110, housing: 'steelDark', depth: 0.1, cage: true });
   z.decal([-0.799, 1.55, 52.3], [1, 0, 0], 0.9, 0.38, 'sign_drop');
+  // red warning lamps: bulb in a red cup, washing the wall
+  z.wallLamp([-0.8, 2.05, 51.0], [1, 0, 0]);
+  z.wallLamp([0.8, 2.05, 52.7], [-1, 0, 0]);
+  z.wallLamp([-0.75, 2.52, 64.92], [0, 0, -1], { power: 8 });
+  z.wallLamp([0.75, 2.52, 64.92], [0, 0, -1], { power: 8 });
   z.decal([0, 0.002, 52.9], [0, 1, 0], 1.5, 0.6, 'hazardFloor');
 
   // ---- shaft wall: full ring below the deck, a doorway gap at the passage, full ring above it

@@ -54,6 +54,16 @@ export function zone(id, name, min, max, o = {}) {
     return z;
   };
 
+  // bulb in a reflector cup on a wall (n = out of the wall); a baked point light
+  z.wallLamp = (p, n, opt = {}) => {
+    const color = opt.color || [1, 0.07, 0.03], power = opt.power ?? 2.2, cup = opt.cup || 'steelRed';
+    const at = d => [p[0] + n[0] * d, p[1] + n[1] * d, p[2] + n[2] * d];
+    z.cyls.push({ a: at(0), b: at(0.012), r: 0.085, mat: cup, collide: false, occlude: false, sides: 12 });   // base plate
+    z.cyls.push({ a: at(0.012), b: at(0.07), r: 0.07, mat: cup, collide: false, occlude: false, sides: 12 });   // cup
+    z.cyls.push({ a: at(0.02), b: at(0.11), r: 0.024, mat: 'diffuser', collide: false, occlude: false, sides: 8, emit: { color: [1, 0.55, 0.4], power: 26 } }); // bulb
+    z.lights.push({ type: 'point', c: at(0.09), n, rad: 0.03, hx: 0.04, hz: 0.04, color, power, wall: true });
+  };
+
   // room / corridor shell: floor slab, ceiling slab, four walls with openings.
   // t: wall thickness per side ('-x','+x','-z','+z'); shared walls use half thickness.
   z.shell = (o2) => {

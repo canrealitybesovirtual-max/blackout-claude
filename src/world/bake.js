@@ -87,6 +87,25 @@ export function bakeSector(built, grid, lights, doors, doorPrims, opts = {}) {
         let er = 0, eg = 0, eb = 0, dx = 0, dy = 0, dz = 0, dw = 0;
         for (let li = 0; li < Ls.length; li++) {
           const L = Ls[li];
+          if (L.type === 'point') { // small sphere, brightest out along the cup's axis
+            const lx = L.c[0] - px, ly = L.c[1] - py, lz = L.c[2] - pz;
+            if (lx * lx + ly * ly + lz * lz > range * range) continue;
+            for (let a = 0; a < 4; a++) {
+              const j = hash(idx, a * 13 + li * 7) * 2 - 1, k = hash(idx + 77, a * 5 + li) * 2 - 1;
+              const qx = L.c[0] + j * L.rad, qy = L.c[1] + k * L.rad, qz = L.c[2] + (a < 2 ? 1 : -1) * L.rad * 0.5;
+              const wx = qx - px, wy = qy - py, wz = qz - pz, d2 = wx * wx + wy * wy + wz * wz, d = Math.sqrt(d2);
+              const ux = wx / d, uy = wy / d, uz = wz / d, cs = nx * ux + ny * uy + nz * uz;
+              if (cs <= 0) continue;
+              const fwd = -(ux * L.n[0] + uy * L.n[1] + uz * L.n[2]); // light leaving along the axis
+              if (fwd < -0.15) continue;                              // behind the cup
+              if (grid.ray(px, py, pz, ux, uy, uz, d - 0.03, F_OCCLUDE, true)) continue;
+              const e = cs * (0.35 + 0.65 * Math.max(0, fwd)) / (4 * Math.max(d2, L.rad * L.rad * 4));
+              er += L.Le[0] * e; eg += L.Le[1] * e; eb += L.Le[2] * e;
+              const w = (L.Le[0] * 0.2126 + L.Le[1] * 0.7152 + L.Le[2] * 0.0722) * e;
+              dx += ux * w; dy += uy * w; dz += uz * w; dw += w;
+            }
+            continue;
+          }
           const ly = L.c[1] - py;
           if (ly <= 0.002) continue;
           const lx = L.c[0] - px, lz = L.c[2] - pz;

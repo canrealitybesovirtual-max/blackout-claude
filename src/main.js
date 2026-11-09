@@ -145,8 +145,8 @@ async function boot() {
       const best = [];
       for (const L of zm.lights) {
         const dx = L.c[0] - c.x, dy = L.c[1] - py, dz = L.c[2] - c.z, d2 = dx * dx + dy * dy + dz * dz;
-        const I = L.power * 4 * L.hx * L.hz / Math.max(d2, 0.5);
-        if (dy <= 0 || I < 0.05) continue;
+        const I = (L.type === 'point' ? L.power * 0.25 : L.power * 4 * L.hx * L.hz) / Math.max(d2, 0.5);
+        if ((dy <= 0 && L.type !== 'point') || I < 0.05) continue;
         best.push({ L, I, d: Math.sqrt(d2), dx, dy, dz });
       }
       best.sort((a, b) => b.I - a.I);
@@ -155,7 +155,7 @@ async function boot() {
         if (k >= 2) break;
         if (g.ray(c.x, py, c.z, b.dx / b.d, b.dy / b.d, b.dz / b.d, b.d - 0.1, F_SHOOT, true)) continue;
         U.uPrbPos.value[k].set(b.L.c[0], b.L.c[1], b.L.c[2], 4 * b.L.hx * b.L.hz + 0.3);
-        U.uPrbCol.value[k].set(...b.L.color).multiplyScalar(b.L.power * 4 * b.L.hx * b.L.hz);
+        U.uPrbCol.value[k].set(...b.L.color).multiplyScalar(b.L.type === 'point' ? b.L.power * 0.25 : b.L.power * 4 * b.L.hx * b.L.hz);
         k++;
       }
       for (; k < 2; k++) U.uPrbCol.value[k].set(0, 0, 0);
