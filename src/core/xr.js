@@ -1,55 +1,37 @@
 // WebXR (Quest browser / PC VR): rig that carries the headset, smooth locomotion and turning,
-// real walking kept out of walls, flashlight in the right hand. Comfort: the head is never moved
+// real walking kept out of walls; gun rigs in the right hand, the torch in the left (both aim along the ray). Comfort: the head is never moved
 // by the game except to stop it going through a wall; no bob, no forced rotation.
 import * as THREE from 'three';
-import { makeDynamicMaterial } from '../render/shaders.js';
 
 const TURN = 1.92;      // rad/s at full stick (smooth turning)
 const DEAD = 0.15;
 
-function tagged(geo, layer, tint, emit) {
-  const g = geo.toNonIndexed(), n = g.attributes.position.count;
-  g.setAttribute('aLayer', new THREE.BufferAttribute(new Uint8Array(n).fill(layer), 1));
-  const t = new Uint8Array(n * 3); for (let i = 0; i < n; i++) { t[i * 3] = tint[0] * 127.5; t[i * 3 + 1] = tint[1] * 127.5; t[i * 3 + 2] = tint[2] * 127.5; }
-  g.setAttribute('aTint', new THREE.BufferAttribute(t, 3, true));
-  g.setAttribute('aEmit', new THREE.BufferAttribute(new Float32Array(n).fill(emit), 1));
-  return g;
-}
-function merged(list) {
-  const out = new THREE.BufferGeometry();
-  for (const nm of ['position', 'normal', 'uv', 'aLayer', 'aTint', 'aEmit']) {
-    const a0 = list[0].attributes[nm], arr = new a0.array.constructor(list.reduce((s, g) => s + g.attributes[nm].array.length, 0));
-    let o = 0; for (const g of list) { arr.set(g.attributes[nm].array, o); o += g.attributes[nm].array.length; }
-    out.setAttribute(nm, new THREE.BufferAttribute(arr, a0.itemSize, a0.normalized));
-  }
-  out.computeBoundingSphere();
-  return out;
-}
-
 export class XR {
-  constructor(renderer, scene, camera, player, input, arrays) {
+  constructor(renderer, scene, camera, player, input) {
     Object.assign(this, { renderer, scene, camera, player, input });
     this.supported = false; this.on = false; this.session = null;
     this.rig = new THREE.Group(); this.rig.name = 'xr-rig'; scene.add(this.rig);
     this.hands = { left: null, right: null }; this.prev = { left: [], right: [] };
     this.view = new THREE.PerspectiveCamera();   // world-space stand-in for the head (zones, audio, probes)
-    this._h = new THREE.Vector3(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
+    this._h = new THREE.Vector3(); this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
     renderer.xr.enabled = true;
-    // flashlight model for the right hand (one draw)
-    const body = new THREE.CylinderGeometry(0.017, 0.017, 0.16, 12); body.rotateX(Math.PI / 2); body.translate(0, -0.01, 0.03);
-    const head = new THREE.CylinderGeometry(0.024, 0.019, 0.04, 12); head.rotateX(Math.PI / 2); head.translate(0, -0.01, -0.07);
-    const lens = new THREE.CylinderGeometry(0.021, 0.021, 0.003, 12); lens.rotateX(Math.PI / 2); lens.translate(0, -0.01, -0.091);
-    this.torch = new THREE.Mesh(merged([tagged(body, 6, [1, 1, 1], 0), tagged(head, 8, [1, 1, 1], 0), tagged(lens, 10, [1, 0.97, 0.9], -3)]), makeDynamicMaterial(arrays));
-    this.torch.frustumCulled = false;
-    const glove = new THREE.BoxGeometry(0.05, 0.03, 0.09); glove.translate(0, -0.02, 0.03);
-    this.leftMesh = new THREE.Mesh(merged([tagged(glove, 11, [0.25, 0.24, 0.2], 0)]), this.torch.material);
+    // hand models arrive later (setModels): left = arm holding the torch, right = the gun rigs
+    this.models = { left: null, right: null }; this.torch = null; this.torchLen = 0.3;
     for (let i = 0; i < 2; i++) {
       const grip = renderer.xr.getControllerGrip(i), ray = renderer.xr.getController(i);
       this.rig.add(grip); this.rig.add(ray);
-      ray.addEventListener('connected', e => { const h = e.data.handedness; if (h !== 'left' && h !== 'right') return; this.hands[h] = { grip, ray, src: e.data }; (h === 'right' ? grip.add(this.torch) : grip.add(this.leftMesh)); });
+      ray.addEventListener('connected', e => { const h = e.data.handedness; if (h !== 'left' && h !== 'right') return; this.hands[h] = { grip, ray, src: e.data }; if (this.models[h]) ray.add(this.models[h]); });
       ray.addEventListener('disconnected', e => { const h = e.data && e.data.handedness; if (this.hands[h] && this.hands[h].ray === ray) this.hands[h] = null; });
     }
     if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { this.supported = ok; if (this.onSupport) this.onSupport(ok); }).catch(() => {});
+  }
+  setModels(m) {
+    for (const h of ['left', 'right']) {
+      if (!m[h]) continue;
+      this.models[h] = m[h];
+      if (this.hands[h]) this.hands[h].ray.add(m[h]);
+    }
+    if (m.torch) { this.torch = m.torch; this.torchLen = m.len; }
   }
   async enter() {
     if (!this.supported || this.on) return;
@@ -82,6 +64,12 @@ export class XR {
     if (!this.on) return;
     const P = this.player, rig = this.rig;
     this._poll(dt);
+    // models ride the aim ray (guns point where the controller points), the hand sits on the grip
+    for (const h of ['left', 'right']) {
+      const H = this.hands[h], M = this.models[h]; if (!H || !M) continue;
+      H.ray.updateMatrixWorld(true); H.grip.updateMatrixWorld(true);
+      this._m.copy(H.ray.matrixWorld).invert().multiply(H.grip.matrixWorld); M.position.setFromMatrixPosition(this._m);
+    }
     // turn about the head, not the rig origin
     const turn = this.turn * TURN * dt;
     if (turn) {
@@ -122,23 +110,27 @@ export class XR {
       if (side === 'left') {
         I.move.x = dz(sx); I.move.y = -dz(sy);
         I.held.sprint = down(3);                      // stick click
+        if (edge(0)) I.pressed.add('light');          // trigger: the torch in this hand
         if (edge(4)) I.crouch = !I.crouch;            // X
         if (edge(5)) I.pressed.add('perf');           // Y
       } else {
         this.turn = -dz(sx);
-        if (edge(0)) I.pressed.add('use');            // trigger: doors, panels
-        if (edge(4)) I.pressed.add('light');          // A: flashlight
-        if (edge(5)) I.pressed.add('jump');           // B
+        I.held.fire = down(0);                        // trigger: fire (or use, pointing at a panel)
+        if (edge(0)) I.pressed.add('use');
+        if (edge(4)) I.pressed.add('reload');         // A
+        if (edge(5)) I.pressed.add('swap');           // B: next gun / torch
+        if (edge(3)) I.pressed.add('jump');           // stick click
       }
       this.prev[side] = bt.map((b, i) => down(i));
     }
   }
   // flashlight in the right hand (null = none)
+  // the torch in the left hand (its lens is on its +z end)
   lightPose(outPos, outDir) {
-    const H = this.hands.right; if (!H) return false;
-    H.grip.updateMatrixWorld(true);
-    outPos.set(0, -0.01, -0.1).applyMatrix4(H.grip.matrixWorld);
-    outDir.set(0, 0, -1).transformDirection(H.grip.matrixWorld);
+    if (!this.torch || !this.hands.left) return false;
+    this.torch.updateWorldMatrix(true, false);
+    outPos.set(0, 0, this.torchLen * 0.5 + 0.01).applyMatrix4(this.torch.matrixWorld);
+    outDir.set(0, 0, 1).transformDirection(this.torch.matrixWorld);
     return true;
   }
   // what the right hand points at (for doors and panels)

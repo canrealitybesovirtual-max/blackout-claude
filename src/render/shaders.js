@@ -415,3 +415,94 @@ export function makeHaloMaterial() {
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   });
 }
+
+// ---- GLB models (static or skinned): their own PBR maps, lit like the dynamic objects
+// (ambient cube + the two nearest baked fixtures + flashlight/muzzle), fog, same finish.
+// Hands: aPart 0 glove / 1 forearm / 2 upper arm recolours them as gloves and sleeves.
+const MODEL_VERT = /* glsl */`
+#include <common>
+#include <skinning_pars_vertex>
+attribute float aPart;
+varying vec3 vPos; varying vec3 vN; varying vec2 vUv; varying float vPart;
+void main(){
+  #include <skinbase_vertex>
+  #include <begin_vertex>
+  #include <beginnormal_vertex>
+  #include <skinnormal_vertex>
+  #include <skinning_vertex>
+  vec4 wp = modelMatrix * vec4(transformed, 1.0);
+  vPos = wp.xyz; vN = normalize(mat3(modelMatrix) * objectNormal); vUv = uv; vPart = aPart;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+const MODEL_FRAG = /* glsl */`
+uniform sampler2D uMap, uNormalMap, uOrm;
+uniform vec4 uColor; uniform vec3 uFac; uniform vec4 uHas; // map, normal, orm, alphaTest
+uniform vec3 uAmb[6]; uniform vec4 uPrbPos[2]; uniform vec3 uPrbCol[2];
+uniform float uGloveMode, uCutUpper, uHideLeft, uEmit, uFlashOn;
+uniform vec3 uGlove, uSleeve;
+varying vec3 vPos; varying vec3 vN; varying vec2 vUv; varying float vPart;
+${COMMON}
+vec3 ambCube(vec3 n){ vec3 s = n * n; return s.x * (n.x > 0.0 ? uAmb[0] : uAmb[1]) + s.y * (n.y > 0.0 ? uAmb[2] : uAmb[3]) + s.z * (n.z > 0.0 ? uAmb[4] : uAmb[5]); }
+void main(){
+  float side = vPart > 9.5 ? 1.0 : 0.0, part = vPart - side * 10.0;   // +10 left arm, 2 upper arm
+  if (uCutUpper > 0.5 && part > 1.5) discard;
+  if (uHideLeft > 0.5 && side > 0.5) discard;
+  vec4 A = uHas.x > 0.5 ? texture2D(uMap, vUv) : vec4(1.0);
+  if (uHas.w > 0.0 && A.a < uHas.w) discard;
+  vec3 albedo = A.rgb * uColor.rgb;
+  float rough = uFac.x, metal = uFac.y;
+  if (uHas.z > 0.5) { vec4 o = texture2D(uOrm, vUv); rough *= o.g; metal *= o.b; }
+  if (uGloveMode > 0.5) {
+    float l = dot(A.rgb, vec3(0.3, 0.59, 0.11));
+    float detail = clamp(0.55 + l * 0.9, 0.55, 1.35);               // keep the skin map's creases as material detail
+    albedo = (vPart < 0.5 ? uGlove : uSleeve) * detail;
+    rough = vPart < 0.5 ? 0.62 : 0.92; metal = 0.0;
+  }
+  vec3 Ng = normalize(vN); if (!gl_FrontFacing) Ng = -Ng;
+  vec3 N = Ng;
+  if (uHas.y > 0.5) {
+    vec3 tn = texture2D(uNormalMap, vUv).xyz * 2.0 - 1.0; tn.xy *= uFac.z;
+    vec3 dp1 = dFdx(vPos), dp2 = dFdy(vPos); vec2 duv1 = dFdx(vUv), duv2 = dFdy(vUv);
+    vec3 dp2perp = cross(dp2, Ng), dp1perp = cross(Ng, dp1);
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x, B = dp2perp * duv1.y + dp1perp * duv2.y;
+    float m = max(dot(T, T), dot(B, B));
+    if (m > 1e-20) N = normalize(mat3(T * inversesqrt(m), B * inversesqrt(m), Ng) * normalize(tn));
+  }
+  vec3 V = normalize(cameraPosition - vPos);
+  float NoV = max(dot(N, V), 1e-3), a = max(rough * rough, 0.002);
+  vec3 diff = albedo * (1.0 - metal), f0 = mix(vec3(0.04), albedo, metal);
+  vec3 col = diff * ambCube(N) + envBRDF(f0, rough, NoV) * ambCube(reflect(-V, N)) * 1.1;
+  for (int i = 0; i < 2; i++) {
+    vec3 Lv = uPrbPos[i].xyz - vPos; float d2 = dot(Lv, Lv); vec3 L = Lv * inversesqrt(d2);
+    float NoL = max(dot(N, L), 0.0);
+    // the fixtures are area lights, not points: widen the lobe by their size and keep the energy (Karis)
+    float al = min(1.0, a + sqrt(uPrbPos[i].w) * 0.5 * inversesqrt(d2)), en = (a / al) * (a / al);
+    col += (diff / PI + specBRDF(N, V, L, f0, max(al, 0.03)) * en) * uPrbCol[i] / max(d2, uPrbPos[i].w) * NoL;
+  }
+  col += dynLights(vPos, N, V, diff, f0, a);
+  col += albedo * uEmit * uFlashOn;
+  float fd = length(cameraPosition - vPos);
+  col = mix(col, uFogColor, 1.0 - exp(-fd * uFogDensity));
+  gl_FragColor = vec4(finish(col), 1.0);
+}`;
+export function makeModelMaterial(src, o = {}) {
+  const tex = t => t || null;
+  const orm = src.roughnessMap || src.metalnessMap;
+  const m = new THREE.ShaderMaterial({
+    uniforms: {
+      ...U,
+      uMap: { value: tex(src.map) }, uNormalMap: { value: tex(src.normalMap) }, uOrm: { value: tex(orm) },
+      uColor: { value: new THREE.Vector4(src.color ? src.color.r : 1, src.color ? src.color.g : 1, src.color ? src.color.b : 1, 1) },
+      uFac: { value: new THREE.Vector3(src.roughness ?? 0.8, src.metalness ?? 0, src.normalScale ? src.normalScale.x : 1) },
+      uHas: { value: new THREE.Vector4(src.map ? 1 : 0, src.normalMap ? 1 : 0, orm ? 1 : 0, src.alphaTest || (src.transparent ? 0.5 : 0)) },
+      uGloveMode: { value: o.glove ? 1 : 0 }, uCutUpper: { value: 0 }, uHideLeft: { value: 0 }, uEmit: { value: o.emit || 0 },
+      uGlove: { value: new THREE.Color(0.05, 0.048, 0.044) }, uSleeve: { value: new THREE.Color(0.17, 0.18, 0.13) },
+      // per-object probe (NPCs far from the camera) or the shared camera probe
+      uAmb: o.ownProbe ? { value: Array.from({ length: 6 }, () => new THREE.Vector3(0.05, 0.05, 0.05)) } : U.uAmb,
+      uPrbPos: o.ownProbe ? { value: [new THREE.Vector4(0, 10, 0, 1), new THREE.Vector4(0, 10, 0, 1)] } : U.uPrbPos,
+      uPrbCol: o.ownProbe ? { value: [new THREE.Vector3(), new THREE.Vector3()] } : U.uPrbCol,
+    },
+    vertexShader: MODEL_VERT, fragmentShader: MODEL_FRAG, side: src.side ?? THREE.FrontSide,
+  });
+  return m;
+}

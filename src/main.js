@@ -11,7 +11,7 @@ import { Perf } from './core/perf.js';
 import { AudioEngine } from './audio/audio.js';
 import { Player } from './game/player.js';
 import { Effects } from './game/effects.js';
-import { WeaponSystem, impactClass } from './game/weapon.js';
+import { GunSystem } from './game/guns.js';
 import { Hands } from './game/hands.js';
 import { XR } from './core/xr.js';
 import { SlidingDoor, Targets } from './game/props.js';
@@ -83,11 +83,13 @@ async function boot() {
 
   let muzzleT = 0; const muzzlePos = new THREE.Vector3();
   // guns stay off until the user's own GLB weapons go in (?guns=on = the placeholder set)
-  const weapons = params.get('guns') === 'on' ? new WeaponSystem(arrays, {
+  // the user's animated rigs (Saiga, pistol) + flashlight hands; ?guns=off = flashlight only
+  const weapons = params.get('guns') === 'off' ? new Hands(audio) : new GunSystem(arrays, {
     zm, player, effects, audio, targets,
     flashLight: p => { muzzlePos.copy(p); muzzleT = 0.06; },
     onShot: (o, d, w) => shoot(o, d, w),
-  }) : new Hands(audio);
+    blockFire: () => !!(xr && xr.on && interactPrompt()),   // VR trigger on a door panel uses it
+  });
 
   // ---- hitscan ----
   function shoot(o, d) {
@@ -98,7 +100,7 @@ async function boot() {
     if (tw < 0) return;
     const H = g.hit, p = [o.x + d.x * tw, o.y + d.y * tw, o.z + d.z * tw], n = [H.nx, H.ny, H.nz];
     const prim = H.prim, face = H.face;
-    const cls = impactClass(zm, prim, face);
+    const cls = (MATERIALS[MAT_KEYS[zm.matAtHit(prim, face)]] || MATERIALS.floor).impact;
     audio.play3D('imp_' + cls, p, { gain: 0.9, maxDist: 35, send: 0.4, pri: 1 });
     if (cls === 'metal') { effects.spark(p, n, 10, 6); effects.puff(p, [n[0] * 0.5, n[1] * 0.5, n[2] * 0.5], 1, 0.08, 0.12, 0.6); }
     else if (cls === 'concrete') { effects.spark(p, n, 3, 4); effects.puff(p, [n[0] * 0.9, n[1] * 0.9 + 0.1, n[2] * 0.9], 4, 0.16, 0.32, 1.6); }
@@ -130,43 +132,44 @@ async function boot() {
   let probeTick = 0;
   const { MATERIALS, LAYER_ALBEDO } = await import('./config/materials.js');
   const { MAT_KEYS } = await import('./world/build.js');
-  function probe(dt) {
-    const g = zm.grid; if (!g) return;
-    const c = VIEW.position, py = c.y - 0.25;
-    if ((probeTick++ % 3) === 0) {
-      for (let i = 0; i < 6; i++) {
-        const v = ambT[i].set(0, 0, 0);
-        for (let s = 0; s < 3; s++) {
-          let dx = DIRS[i][0] + (Math.random() - 0.5) * 0.9, dy = DIRS[i][1] + (Math.random() - 0.5) * 0.9, dz = DIRS[i][2] + (Math.random() - 0.5) * 0.9;
-          const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
-          const tt = g.ray(c.x, py, c.z, dx, dy, dz, 25, F_SHOOT, false);
-          if (tt < 0) continue;
-          const p = [c.x + dx * tt, py + dy * tt, c.z + dz * tt];
-          zm.lightAtHit(g.hit.prim, g.hit.face, p, l3);
-          const mk = MAT_KEYS[zm.matAtHit(g.hit.prim, g.hit.face)], md = MATERIALS[mk] || MATERIALS.floor, a = LAYER_ALBEDO[md.layer];
-          v.x += l3[0] * a[0] * md.tint[0]; v.y += l3[1] * a[1] * md.tint[1]; v.z += l3[2] * a[2] * md.tint[2];
-        }
-        v.multiplyScalar(1 / 3);
+  // baked-light probe at a point: ambient cube from rays into the lightmaps + the two strongest visible fixtures
+  function sampleProbe(cx, cy, cz, ambOut, prbPos, prbCol, rays = 3) {
+    const g = zm.grid; if (!g) return false;
+    for (let i = 0; i < 6; i++) {
+      const v = ambOut[i].set(0, 0, 0);
+      for (let s = 0; s < rays; s++) {
+        let dx = DIRS[i][0] + (Math.random() - 0.5) * 0.9, dy = DIRS[i][1] + (Math.random() - 0.5) * 0.9, dz = DIRS[i][2] + (Math.random() - 0.5) * 0.9;
+        const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
+        const tt = g.ray(cx, cy, cz, dx, dy, dz, 25, F_SHOOT, false);
+        if (tt < 0) continue;
+        zm.lightAtHit(g.hit.prim, g.hit.face, [cx + dx * tt, cy + dy * tt, cz + dz * tt], l3);
+        const mk = MAT_KEYS[zm.matAtHit(g.hit.prim, g.hit.face)], md = MATERIALS[mk] || MATERIALS.floor, a = LAYER_ALBEDO[md.layer];
+        v.x += l3[0] * a[0] * md.tint[0]; v.y += l3[1] * a[1] * md.tint[1]; v.z += l3[2] * a[2] * md.tint[2];
       }
-      // two strongest visible fixtures as soft point lights
-      const best = [];
-      for (const L of zm.lights) {
-        const dx = L.c[0] - c.x, dy = L.c[1] - py, dz = L.c[2] - c.z, d2 = dx * dx + dy * dy + dz * dz;
-        const I = (L.type === 'point' ? L.power * 0.25 : L.power * 4 * L.hx * L.hz) / Math.max(d2, 0.5);
-        if ((dy <= 0 && L.type !== 'point') || I < 0.05) continue;
-        best.push({ L, I, d: Math.sqrt(d2), dx, dy, dz });
-      }
-      best.sort((a, b) => b.I - a.I);
-      let k = 0;
-      for (const b of best) {
-        if (k >= 2) break;
-        if (g.ray(c.x, py, c.z, b.dx / b.d, b.dy / b.d, b.dz / b.d, b.d - 0.1, F_SHOOT, true)) continue;
-        U.uPrbPos.value[k].set(b.L.c[0], b.L.c[1], b.L.c[2], 4 * b.L.hx * b.L.hz + 0.3);
-        U.uPrbCol.value[k].set(...b.L.color).multiplyScalar(b.L.type === 'point' ? b.L.power * 0.25 : b.L.power * 4 * b.L.hx * b.L.hz);
-        k++;
-      }
-      for (; k < 2; k++) U.uPrbCol.value[k].set(0, 0, 0);
+      v.multiplyScalar(1 / rays);
     }
+    const best = [];
+    for (const L of zm.lights) {
+      const dx = L.c[0] - cx, dy = L.c[1] - cy, dz = L.c[2] - cz, d2 = dx * dx + dy * dy + dz * dz;
+      const I = (L.type === 'point' ? L.power * 0.25 : L.power * 4 * L.hx * L.hz) / Math.max(d2, 0.5);
+      if ((dy <= 0 && L.type !== 'point') || I < 0.05) continue;
+      best.push({ L, I, d: Math.sqrt(d2), dx, dy, dz });
+    }
+    best.sort((a, b) => b.I - a.I);
+    let k = 0;
+    for (const b of best) {
+      if (k >= 2) break;
+      if (g.ray(cx, cy, cz, b.dx / b.d, b.dy / b.d, b.dz / b.d, b.d - 0.1, F_SHOOT, true)) continue;
+      prbPos[k].set(b.L.c[0], b.L.c[1], b.L.c[2], 4 * b.L.hx * b.L.hz + 0.3);
+      prbCol[k].set(...b.L.color).multiplyScalar(b.L.type === 'point' ? b.L.power * 0.25 : b.L.power * 4 * b.L.hx * b.L.hz);
+      k++;
+    }
+    for (; k < 2; k++) prbCol[k].set(0, 0, 0);
+    return true;
+  }
+  function probe(dt) {
+    const c = VIEW.position;
+    if ((probeTick++ % 3) === 0) sampleProbe(c.x, c.y - 0.25, c.z, ambT, U.uPrbPos.value, U.uPrbCol.value);
     const a = Math.min(1, dt * 8), avg = U.uAmbAvg.value.set(0, 0, 0);
     for (let i = 0; i < 6; i++) { amb[i].lerp(ambT[i], a); U.uAmb.value[i].copy(amb[i]); avg.add(amb[i]); }
     avg.multiplyScalar(1 / 6);
@@ -259,12 +262,19 @@ async function boot() {
   // ---- frame ----
   let last = performance.now();
   const fwd = new THREE.Vector3(), up = new THREE.Vector3(), lp = new THREE.Vector3(), ld = new THREE.Vector3();
-  xr = new XR(renderer, scene, camera, player, input, arrays);
+  xr = new XR(renderer, scene, camera, player, input);
   xr.onSupport = ok => { if (ok) $('vr').classList.remove('hide'); };
-  xr.onEnd = () => { player.moveYaw = undefined; U.uGrain.value = Q.grain; U.uVignette.value = Q.vignette; pause(); };
+  xr.onEnd = () => { weapons.vrOn = false; player.moveYaw = undefined; U.uGrain.value = Q.grain; U.uVignette.value = Q.vignette; pause(); };
   $('vr').onclick = async () => {
     await start(true);
-    try { U.uGrain.value = 0; U.uVignette.value = 0; await xr.enter(); }
+    try {
+      U.uGrain.value = 0; U.uVignette.value = 0;
+      if (!xr.modelsLoaded) {   // hand models for the controllers (built once)
+        xr.modelsLoaded = true;
+        Promise.all([(weapons.hands || weapons).makeVR(), weapons.hands ? weapons.makeVR() : null]).then(([h, g]) => { xr.setModels({ left: h && h.left, torch: h && h.torch, len: h && h.len, right: g }); }).catch(e => console.error('vr models', e));
+      }
+      await xr.enter(); weapons.vrOn = true;
+    }
     catch (e) { console.error(e); toast('VR could not start: ' + (e && e.message || e)); }
   };
   const xo = new THREE.Vector3(), xd = new THREE.Vector3();
@@ -298,7 +308,7 @@ async function boot() {
     perf.time('zones', performance.now() - t1);
     door.update(dt, player.pos);
     targets.update(dt);
-    if (running) weapons.update(dt, input, V); else weapons.update(0, { held: {}, has: () => false }, V);
+    if (running) weapons.update(dt, input, V, player); else weapons.update(0, { held: {}, has: () => false }, V, player);
     t1 = performance.now();
     effects.update(dt, V.position);
     perf.time('fx', performance.now() - t1);
@@ -326,7 +336,7 @@ async function boot() {
     renderer.setRenderTarget(null);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
-    if (weapons.scene) { renderer.clearDepth(); renderer.render(weapons.scene, weapons.cam); }
+    if (weapons.scene && !xr.on) { renderer.clearDepth(); renderer.render(weapons.scene, weapons.cam); } // VR: hands ride the controllers
     perf.endGPU();
     const total = performance.now() - c0;
     perf.time('render', total - cpu);

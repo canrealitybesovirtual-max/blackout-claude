@@ -3,8 +3,16 @@
 import * as THREE from 'three';
 import { makeSmokeMaterial, makeSparkMaterial, makeHoleMaterial, makeDynamicMaterial } from '../render/shaders.js';
 import { cellUV } from '../config/decals.js';
-import { buildCasing } from './viewmodels.js';
 import { F_COLLIDE, F_SHOOT } from '../world/grid.js';
+
+// spent case for the shell pool (one shared shape, scaled per calibre would be next)
+function buildCasing() {
+  const g = new THREE.CylinderGeometry(0.0048, 0.0048, 0.04, 6).toNonIndexed(), n = g.attributes.position.count;
+  g.setAttribute('aLayer', new THREE.BufferAttribute(new Uint8Array(n).fill(9), 1));
+  g.setAttribute('aTint', new THREE.BufferAttribute(new Uint8Array(n * 3).fill(127), 3, true));
+  g.setAttribute('aEmit', new THREE.BufferAttribute(new Float32Array(n), 1));
+  return g;
+}
 
 export class Effects {
   constructor(scene, profile, arrays, atlas, zm, audio) {

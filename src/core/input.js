@@ -23,7 +23,7 @@ export class Input {
       if (!this.enabled) return;
       if (e.repeat) return;
       this.keys.add(e.code); this.device = 'kbm';
-      const map = { KeyR: 'reload', KeyE: 'use', KeyF: 'light', KeyV: 'mode', KeyT: 'inspect', Digit1: 'slot1', Digit2: 'slot2', KeyQ: 'swap', Space: 'jump', KeyP: 'perf', KeyK: 'fireTap' };
+      const map = { KeyR: 'reload', KeyE: 'use', KeyF: 'light', KeyV: 'mode', KeyT: 'inspect', Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', KeyQ: 'swap', Space: 'jump', KeyP: 'perf', KeyK: 'fireTap' };
       if (map[e.code]) this.pressed.add(map[e.code]);
       if (e.code === 'KeyC' || e.code === 'ControlLeft') this.crouch = !this.crouch;
       if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();

@@ -35,7 +35,7 @@ Add a zone: new file in `src/world/zones`, list it in `level.js` with neighbours
 - [x] Quality profiles, auto-detect, dynamic resolution, perf overlay (FPS, 1% low, CPU/GPU ms, draw calls, tris, memory)
 - [x] Corridor, armory/test lane, streamed maintenance tunnel, sliding door (lighting follows the door)
 - [x] Player: walk/sprint/crouch/jump, stamina, step-up, surface footsteps, wake-up intro
-- [x] Rifle + pistol: auto/semi, chamber logic, tactical/empty reloads, ADS red dot, recoil, sway, inspect, switch, weapon light
+- [x] Your rigged Saiga + pistol (models/fps_saiga.glb, fps_pistol.glb): their own idle / walk / fire / reload clips, real size, aim down the iron sights, chamber + magazine logic, recoil, sway; slot 3 = flashlight hands
 - [x] Hitscan, impacts per surface, bullet holes, sparks, smoke, ejected cases, steel targets
 - [x] Keyboard/mouse, controller, touch
 - [ ] Enemy AI · more of the facility · XR session · real photo textures / recorded audio
@@ -45,6 +45,6 @@ Add a zone: new file in `src/world/zones`, list it in `level.js` with neighbours
 
 ## VR (WebXR)
 Menu shows ENTER VR when the browser supports it (Quest browser, PC VR in Chrome / Edge). Quest auto-picks the VR profile (MSAA, no grain / vignette / head bob, foveation 1).
-Controls: left stick move (click = run), right stick smooth turn, right trigger use (point at the door panel), A flashlight (right hand), B jump, X crouch, Y stats. Real walking is followed by the body and stopped at walls.
+Controls: gun in the right hand (aims along the controller), flashlight in the left. Left stick move (click = run), right stick smooth turn, right trigger fire (or use, pointed at a door panel), A reload, B next gun, left trigger flashlight, X crouch, Y stats, right stick click jump. Real walking is followed by the body and stopped at walls.
 WebXR needs a secure origin: on Quest use `adb reverse tcp:8000 tcp:8000` and open http://localhost:8000, or host the folder over https (e.g. GitHub Pages).
 Tested with the IWER Quest 3 emulator: enter, stick walk, smooth turn, physical walk into a wall (stopped), flashlight.
