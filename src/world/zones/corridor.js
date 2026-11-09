@@ -49,8 +49,8 @@ export default function corridor() {
   z.decal([0, 0.001, 0.75], [0, 1, 0], 3.0, 0.9, 'hazardFloor');
 
   // wall equipment
-  z.pipe([-1.47, 0.6, 11.4], [-1.47, 1.15, 11.4], 0.085, 'steelRed', { collide: true });
-  z.box([-1.6, 0.85, 11.33], [-1.55, 1.25, 11.47], 'steelDark', { collide: false });
+  // fire extinguisher: modelled in game/extinguisher.js; a collision box only here
+  z.box([-1.6, 0.6, 11.31], [-1.39, 1.13, 11.49], 'steel', { render: false, occlude: false });
   z.decal([-1.599, 1.55, 11.4], [1, 0, 0], 0.36, 0.26, 'sign_fire');
   // electrical panel: the steel housing is baked here; frame, hinged door and breakers are game/panel.js (PANEL)
   const P = PANEL, D = PANEL_DOOR;

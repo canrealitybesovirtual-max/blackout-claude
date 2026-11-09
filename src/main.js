@@ -18,6 +18,7 @@ import { SlidingDoor, Targets } from './game/props.js';
 import { ElectricPanel } from './game/panel.js';
 import { LaunchDoor } from './game/keypad.js';
 import { Fixtures } from './game/fixtures.js';
+import { Extinguisher } from './game/extinguisher.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -84,6 +85,7 @@ async function boot() {
   const panel = new ElectricPanel(scene, audio);
   const launch = new LaunchDoor(scene, audio);
   const fixtures = new Fixtures(scene, sector, zm, audio);
+  const extinguisher = new Extinguisher(scene, [-1.505, 0.62, 11.4], -Math.PI / 2);   // label side facing the corridor (+x)
   door.sync();
   let fogTarget = z0.fogDensity; U.uFogDensity.value = fogTarget; U.uFogColor.value.setRGB(...z0.fog);
 
@@ -317,7 +319,7 @@ async function boot() {
     let t1 = performance.now();
     zm.update(V);
     perf.time('zones', performance.now() - t1);
-    door.update(dt, player.pos); panel.update(dt); if (zm.current === 'corridor') panel.probe(sampleProbe); launch.update(dt); if (zm.current === 'silo') launch.probe(sampleProbe);
+    door.update(dt, player.pos); panel.update(dt); if (zm.current === 'corridor') { panel.probe(sampleProbe); extinguisher.probe(sampleProbe); } launch.update(dt); if (zm.current === 'silo') launch.probe(sampleProbe);
     targets.update(dt);
     if (running) weapons.update(dt, input, V, player); else weapons.update(0, { held: {}, has: () => false }, V, player);
     t1 = performance.now();

@@ -55,3 +55,4 @@ Tested with the IWER Quest 3 emulator: enter, stick walk, smooth turn, physical 
 - Guns held upright, bore straight ahead; the flashlight hand's fingers close round the torch.
 - Falling: below the floors you are put back on your last solid footing. VR: the headset is brought over the body at the start and on a recentre (no more starting outside the map).
 - Ceiling troffers wear your fixture photo (grid diffuser, tube shadow), each tube aged a little differently; the last corridor tube is failing: it stutters, drops out, restarts with a tick and its light on the corridor flickers with it (`src/game/fixtures.js`).
+- Fire extinguisher remodelled after your photos (domed can, chrome valve + gauge, lever, pin ring, hose to a horn nozzle in the strap, wall bracket), body textured from your label photo (`tools/prep_extinguisher.py`, `src/game/extinguisher.js`).
