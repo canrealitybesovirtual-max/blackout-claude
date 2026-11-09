@@ -136,6 +136,7 @@ export class Input {
   }
   update(dt) {
     if (!this.enabled) { this.move.x = this.move.y = 0; return; }
+    if (this.device === 'xr') return; // the XR rig writes move / actions
     const padActive = this._pollPad(dt);
     if (this.device === 'kbm') {
       const k = this.keys;

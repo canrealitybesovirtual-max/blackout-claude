@@ -13,6 +13,7 @@ import { Player } from './game/player.js';
 import { Effects } from './game/effects.js';
 import { WeaponSystem, impactClass } from './game/weapon.js';
 import { Hands } from './game/hands.js';
+import { XR } from './core/xr.js';
 import { SlidingDoor, Targets } from './game/props.js';
 
 const $ = id => document.getElementById(id);
@@ -45,6 +46,8 @@ async function boot() {
   perf.texBytes += arrays.bytes + atlas.bytes;
   perf.notes.materials = `${(performance.now() - t).toFixed(0)} ms (${Q.tex}px x13 layers)`;
   U.uGrain.value = Q.grain; U.uVignette.value = Q.vignette;
+  let bright = 0.72; try { bright = +(localStorage.getItem('bs.bright') || 0.72); } catch (e) { /* storage blocked */ }
+  U.uExposure.value = bright;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(Q.fov, 1, 0.05, 120);
@@ -105,8 +108,12 @@ async function boot() {
 
   // ---- interaction ----
   const useTargets = [...sector.doors[0].panels.map(p => ({ pos: p.pos, r: 0.6 })), { pos: door.center, r: 1.1 }];
+  let xr = null;
+  let VIEW = camera; // world-space head (the XR rig's stand-in in VR)
+  const _ro = new THREE.Vector3(), _rd = new THREE.Vector3();
   function interactPrompt() {
-    const c = camera.position, f = new THREE.Vector3(); camera.getWorldDirection(f);
+    let c = VIEW.position, f = new THREE.Vector3(0, 0, -1).applyQuaternion(VIEW.quaternion);
+    if (xr && xr.on && xr.rightRay(_ro, _rd)) { c = _ro; f = _rd; } // VR: point with the right hand
     for (const u of useTargets) {
       const dx = u.pos[0] - c.x, dy = u.pos[1] - c.y, dz = u.pos[2] - c.z, d = Math.hypot(dx, dy, dz);
       if (d > 2.2) continue;
@@ -125,7 +132,7 @@ async function boot() {
   const { MAT_KEYS } = await import('./world/build.js');
   function probe(dt) {
     const g = zm.grid; if (!g) return;
-    const c = camera.position, py = c.y - 0.25;
+    const c = VIEW.position, py = c.y - 0.25;
     if ((probeTick++ % 3) === 0) {
       for (let i = 0; i < 6; i++) {
         const v = ambT[i].set(0, 0, 0);
@@ -208,7 +215,7 @@ async function boot() {
   // ---- distant explosions: rumble, dust from the ceiling, a little shake ----
   audio.onBoom = () => {
     player.shake = Q.bob ? 1 : 0;
-    const c = camera.position;
+    const c = VIEW.position;
     for (let i = 0; i < 6; i++) effects.puff([c.x + (Math.random() - 0.5) * 4, 2.8, c.z + (Math.random() - 0.5) * 4], [0, -0.3, 0], 2, 0.25, 0.2, 3.5, 0.1);
   };
 
@@ -225,19 +232,21 @@ async function boot() {
   // ---- menu / pause ----
   let running = false;
   const menu = $('menu');
-  async function start() {
+  async function start(noLock) {
     menu.classList.add('hide');
     await audio.init();
     perf.notes.audio = audio.sampleInfo || 'synth only';
     audio.setZone(zm.byId[zm.current].reverb, zm.byId[zm.current].ambience);
     input.enabled = true; running = true;
-    if (!input.dragLook && !('ontouchstart' in window)) input.requestLock();
+    if (!noLock && !input.dragLook && !('ontouchstart' in window)) input.requestLock();
     last = performance.now();
   }
   function pause() { if (!running) return; running = false; input.enabled = false; menu.classList.remove('hide'); $('start').textContent = 'RESUME'; if (audio.ctx) audio.ctx.suspend(); }
-  input.onUnlock = () => { if (!input.dragLook) pause(); };
+  input.onUnlock = () => { if (!input.dragLook && !(xr && xr.on)) pause(); };
   $('start').onclick = start;
   $('quality').onchange = e => { try { localStorage.setItem('bs.quality', e.target.value); } catch (x) { /* blocked */ } location.search = '?q=' + e.target.value; };
+  $('bright').value = bright;
+  $('bright').oninput = e => { U.uExposure.value = +e.target.value; try { localStorage.setItem('bs.bright', e.target.value); } catch (x) { /* blocked */ } };
   $('sens').oninput = e => { input.sens = +e.target.value; try { localStorage.setItem('bs.sens', e.target.value); } catch (x) { /* blocked */ } };
   addEventListener('keydown', e => { if (e.code === 'Escape' && input.dragLook) pause(); });
   $('loading').classList.add('hide');
@@ -246,8 +255,16 @@ async function boot() {
   // ---- frame ----
   let last = performance.now();
   const fwd = new THREE.Vector3(), up = new THREE.Vector3(), lp = new THREE.Vector3(), ld = new THREE.Vector3();
+  xr = new XR(renderer, scene, camera, player, input, arrays);
+  xr.onSupport = ok => { if (ok) $('vr').classList.remove('hide'); };
+  xr.onEnd = () => { player.moveYaw = undefined; U.uGrain.value = Q.grain; U.uVignette.value = Q.vignette; pause(); };
+  $('vr').onclick = async () => {
+    await start(true);
+    try { U.uGrain.value = 0; U.uVignette.value = 0; await xr.enter(); }
+    catch (e) { console.error(e); toast('VR could not start: ' + (e && e.message || e)); }
+  };
+  const xo = new THREE.Vector3(), xd = new THREE.Vector3();
   function frame(now) {
-    requestAnimationFrame(frame);
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // rAF time can precede the start() stamp
     const c0 = performance.now();
     U.uTime.value = now / 1000;
@@ -257,21 +274,28 @@ async function boot() {
       if (input.has('perf')) { perf.visible = !perf.visible; $('perf').style.display = perf.visible ? 'block' : 'none'; }
       if (input.has('pause')) pause();
       let t1 = performance.now();
+      if (xr.on) xr.update(dt);
+      const px0 = player.pos.x, pz0 = player.pos.z;
       player.update(dt, input, weapons.aiming);
+      if (xr.on) { xr.rig.position.x += player.pos.x - px0; xr.rig.position.z += player.pos.z - pz0; } // stick moves carry the headset
       perf.time('player', performance.now() - t1);
       if (input.has('use') && interactPrompt()) door.toggle();
     }
-    player.applyCamera(camera);
-    camera.fov = Q.fov * (1 - weapons.ads * (1 - weapons.def.adsFov)); camera.updateProjectionMatrix();
-    camera.updateMatrixWorld();
+    if (xr.on) { xr.rig.position.y = player.pos.y; xr.rig.updateMatrixWorld(true); }
+    else {
+      player.applyCamera(camera);
+      camera.fov = Q.fov * (1 - weapons.ads * (1 - weapons.def.adsFov)); camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+    }
+    const V = VIEW = xr.on ? xr.view : camera; // world-space view for zones, probes, audio, effects
     let t1 = performance.now();
-    zm.update(camera);
+    zm.update(V);
     perf.time('zones', performance.now() - t1);
     door.update(dt, player.pos);
     targets.update(dt);
-    if (running) weapons.update(dt, input, camera); else weapons.update(0, { held: {}, has: () => false }, camera);
+    if (running) weapons.update(dt, input, V); else weapons.update(0, { held: {}, has: () => false }, V);
     t1 = performance.now();
-    effects.update(dt, camera.position);
+    effects.update(dt, V.position);
     perf.time('fx', performance.now() - t1);
     t1 = performance.now();
     probe(dt);
@@ -281,15 +305,15 @@ async function boot() {
     // dynamic lights: rail flashlight + muzzle flash
     let n = 0;
     if (weapons.flashOn) {
-      weapons.lightPose(lp, ld, camera);
+      if (!(xr.on && xr.lightPose(lp, ld))) weapons.lightPose(lp, ld, V);
       U.uDynPos.value[n].set(lp.x, lp.y, lp.z, 28); U.uDynCol.value[n].set(42, 40, 36, 1); U.uDynDir.value[n].set(ld.x, ld.y, ld.z, Math.cos(0.42)); n++;
     }
     muzzleT -= dt;
     if (muzzleT > 0) { const k = muzzleT / 0.06; U.uDynPos.value[n].set(muzzlePos.x, muzzlePos.y, muzzlePos.z, 9); U.uDynCol.value[n].set(30 * k, 17 * k, 7 * k, 0); n++; }
     U.uDynCount.value = n;
 
-    camera.getWorldDirection(fwd); up.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    audio.setListener(camera.position, fwd, up);
+    fwd.set(0, 0, -1).applyQuaternion(V.quaternion); up.set(0, 1, 0).applyQuaternion(V.quaternion);
+    audio.setListener(V.position, fwd, up);
     audio.update(dt, running ? player.fatigue : 0);
     const cpu = performance.now() - c0;
 
@@ -304,13 +328,13 @@ async function boot() {
     perf.frame(dt * 1000, total);
     perf.draw(dt);
     hud(dt);
-    dynRes(dt, total);
+    if (!xr.on) dynRes(dt, total);
     input.endFrame();
   }
-  requestAnimationFrame(frame);
+  renderer.setAnimationLoop(frame); // XR-safe loop (rAF outside VR)
 
   // test / debug hooks
-  window.__bs = { perf, player, zm, weapons, door, camera, input, renderer, start, Q, ready: true,
+  window.__bs = { perf, player, zm, weapons, door, camera, input, renderer, start, Q, xr, ready: true,
     snap: () => perf.snapshot(),
     tp: (x, y, z, yaw, pitch = 0) => { player.pos.set(x, y, z); player.vel.set(0, 0, 0); player.yaw = yaw; player.pitch = pitch; } };
   if (params.has('autostart')) start();

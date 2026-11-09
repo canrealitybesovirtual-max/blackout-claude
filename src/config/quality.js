@@ -24,6 +24,7 @@ export function detectProfile() {
     gpu = (ext ? c.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '') || '';
     const lose = c && c.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
   } catch (e) { /* no webgl2 */ }
+  if (/OculusBrowser|Quest|Pico/i.test(navigator.userAgent)) return 'vr'; // standalone headsets: stereo profile, MSAA on
   const mem = navigator.deviceMemory || 4, cores = navigator.hardwareConcurrency || 4;
   const mobile = /Android|iPhone|iPad|Mobile|CrOS/i.test(navigator.userAgent);
   if (/SwiftShader|llvmpipe|Software/i.test(gpu)) return 'ultralow';

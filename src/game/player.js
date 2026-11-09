@@ -43,7 +43,7 @@ export class Player {
     let sp = this.crouching ? SPEED.crouch : this.sprinting ? SPEED.sprint : SPEED.walk;
     if (aiming) sp *= 0.6;
     if (this.fatigue > 0.6) sp *= 0.92;
-    const s = Math.sin(this.yaw), c = Math.cos(this.yaw);
+    const hy = this.moveYaw ?? this.yaw, s = Math.sin(hy), c = Math.cos(hy); // VR: the head's heading
     const tx = (mx * c - my * s) * sp, tz = (-mx * s - my * c) * sp;
     const acc = this.onGround ? (ml > 0.01 ? 11 : 14) : 1.8;
     this.vel.x += (tx - this.vel.x) * Math.min(1, acc * dt);
@@ -118,7 +118,17 @@ export class Player {
     const n = this.zm.grid.query(x - R, y + 0.05, z - R, x + R, y + h, z + R, F_COLLIDE, this._hits);
     return n > 0;
   }
+  // VR: the headset walked; move the body after it through the same collision (in 5 cm steps)
+  walkTo(dx, dz) {
+    const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.05)), vx = this.vel.x, vz = this.vel.z;
+    for (let i = 0; i < n; i++) { this.vel.x = dx / n; this.vel.z = dz / n; this._moveH(1); }
+    this.vel.x = vx; this.vel.z = vz;
+  }
   _move(dt) {
+    this._moveH(dt);
+    this._moveV(dt);
+  }
+  _moveH(dt) {
     const g = this.zm.grid, P = this.zm.prims, p = this.pos;
     // horizontal axes with step-up
     for (const ax of ['x', 'z']) {
@@ -134,7 +144,9 @@ export class Player {
         this.vel[ax] = 0;
       }
     }
-    // vertical
+  }
+  _moveV(dt) {
+    const g = this.zm.grid, P = this.zm.prims, p = this.pos;
     p.y += this.vel.y * dt;
     this.onGround = false;
     const n = g.query(p.x - R + 0.02, p.y - 0.001, p.z - R + 0.02, p.x + R - 0.02, p.y + this.h, p.z + R - 0.02, F_COLLIDE, this._hits);

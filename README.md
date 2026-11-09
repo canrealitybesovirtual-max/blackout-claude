@@ -42,3 +42,9 @@ Add a zone: new file in `src/world/zones`, list it in `level.js` with neighbours
 
 ## Photo textures (user-supplied)
 `textures/src/*.png` are the originals; `python3 tools/prep_photos.py` makes the game copies (seamless, de-lit, albedo calibrated to the layer value, 512 px WebP). Floors use `concrete.webp`, ceilings / tunnel walls `ceiling.webp`; relief and roughness come from the photo's detail. Missing file = the generated layer.
+
+## VR (WebXR)
+Menu shows ENTER VR when the browser supports it (Quest browser, PC VR in Chrome / Edge). Quest auto-picks the VR profile (MSAA, no grain / vignette / head bob, foveation 1).
+Controls: left stick move (click = run), right stick smooth turn, right trigger use (point at the door panel), A flashlight (right hand), B jump, X crouch, Y stats. Real walking is followed by the body and stopped at walls.
+WebXR needs a secure origin: on Quest use `adb reverse tcp:8000 tcp:8000` and open http://localhost:8000, or host the folder over https (e.g. GitHub Pages).
+Tested with the IWER Quest 3 emulator: enter, stick walk, smooth turn, physical walk into a wall (stopped), flashlight.
