@@ -347,7 +347,7 @@ async function boot() {
     const cpu = performance.now() - c0;
 
     perf.beginGPU();
-    renderer.setRenderTarget(null);
+    if (!renderer.xr.isPresenting) renderer.setRenderTarget(null);   // in VR three has bound the headset's framebuffer: keep it (null drew to the hidden canvas: black)
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
     if (weapons.scene && !xr.on) { renderer.clearDepth(); renderer.render(weapons.scene, weapons.cam); } // VR: hands ride the controllers

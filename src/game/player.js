@@ -75,10 +75,7 @@ export class Player {
       this.bobPhase += hs * dt / strideLen * Math.PI;
       if (this.stride > strideLen) {
         this.stride = 0;
-        const surf = this._surface();
-        const g = this.crouching ? 0.18 : this.sprinting ? 0.75 : 0.42;
-        this.audio.play2D('step_' + surf, { gain: g, lp: this.crouching ? 2500 : 16000, send: 0.12 });
-        this.audio.stepSurface = surf;
+        this.audio.stepSurface = this._surface();   // footstep sounds removed (the user's call); the surface still feeds the audio
       }
     } else this.stride *= 0.9;
 
@@ -134,6 +131,7 @@ export class Player {
     for (const ax of ['x', 'z']) {
       const d = this.vel[ax] * dt; if (!d) continue;
       p[ax] += d;
+      if (this._unloaded(p.x, p.y, p.z)) { p[ax] -= d; this.vel[ax] = 0; continue; }
       const n = g.query(p.x - R, p.y + 0.01, p.z - R, p.x + R, p.y + this.h, p.z + R, F_COLLIDE, this._hits);
       for (let i = 0; i < n; i++) {
         const k = this._hits[i] * 3, top = P.mx[k + 1];
@@ -145,8 +143,11 @@ export class Player {
       }
     }
   }
+  // a zone still streaming in has no floor yet: hold still at its edge instead of falling into it
+  _unloaded(x, y, z) { const id = this.zm.zoneAt({ x, y: y + 1, z }); return !!id && !this.zm.loaded.has(id); }
   _moveV(dt) {
     const g = this.zm.grid, P = this.zm.prims, p = this.pos;
+    if (this._unloaded(p.x, p.y, p.z)) { this.vel.y = 0; this.onGround = true; return; }
     p.y += this.vel.y * dt;
     this.onGround = false;
     const n = g.query(p.x - R + 0.02, p.y - 0.001, p.z - R + 0.02, p.x + R - 0.02, p.y + this.h, p.z + R - 0.02, F_COLLIDE, this._hits);
