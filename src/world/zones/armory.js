@@ -19,8 +19,8 @@ export default function armory() {
   // supply duct along the ceiling
   z.box([7.2, 3.16, 7], [7.8, 3.6, 21], 'steel', { collide: false });
   for (let c = 8.5; c < 21; c += 1.5) z.box([7.17, 3.13, c - 0.02], [7.83, 3.6, c + 0.02], 'steel', { collide: false, occlude: false });
-  z.decal([7.5, 3.159, 10.6], [0, -1, 0], 0.5, 0.5, 'vent', { up: [0, 0, 1] });
-  z.decal([7.5, 3.159, 16.6], [0, -1, 0], 0.5, 0.5, 'vent', { up: [0, 0, 1] });
+  z.decal([7.5, 3.159, 10.6], [0, -1, 0], 0.52, 0.32, 'vent', { up: [1, 0, 0] });
+  z.decal([7.5, 3.159, 16.6], [0, -1, 0], 0.52, 0.32, 'vent', { up: [1, 0, 0] });
 
   // weapon racks on the north wall, lockers on the south wall
   for (const cx of [4.0, 6.8, 9.6]) rifleRack(z, cx, 21);

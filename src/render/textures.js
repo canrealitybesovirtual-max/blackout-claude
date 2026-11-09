@@ -217,7 +217,7 @@ export function makeMaterialArrays(size, anisotropy = 1, photos = {}) {
 }
 
 // ---------- decal atlas (canvas) ----------
-export function makeDecalAtlas(scale = 1) {
+export function makeDecalAtlas(scale = 1, photos = {}) {
   const S = Math.round(DECAL_ATLAS * scale), cv = document.createElement('canvas');
   cv.width = cv.height = S;
   const g = cv.getContext('2d');
@@ -257,6 +257,7 @@ export function makeDecalAtlas(scale = 1) {
   clip('firing_line', (w, h) => { g.fillStyle = '#e6e3da'; g.font = font(44); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('FIRING LINE', w / 2, h / 2 + 2); wear(w, h, 0.5, 2.5); });
   clip('stencil_b2', (w, h) => { g.fillStyle = '#e3e0d6'; g.font = font(150, 900); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('B2', w / 2, h / 2 + 8); g.fillStyle = 'rgba(0,0,0,1)'; g.globalCompositeOperation = 'destination-out'; g.fillRect(w * 0.47, 0, 8, h); g.fillRect(0, h * 0.48, w, 6); g.globalCompositeOperation = 'source-over'; wear(w, h, 0.9, 3); });
   clip('locker_vent', (w, h) => { for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(0,0,0,0.85)'; g.fillRect(10 + i * 19, 10, 9, h - 20); } });
+  if (photos.vent) clip('vent', (w, h) => g.drawImage(photos.vent, 0, 0, w, h)); else
   clip('vent', (w, h) => { g.fillStyle = '#585b5c'; g.fillRect(2, 2, w - 4, h - 4); g.fillStyle = '#121314'; for (let i = 0; i < 9; i++) g.fillRect(10, 10 + i * 12, w - 20, 7); g.strokeStyle = '#2a2c2d'; g.lineWidth = 4; g.strokeRect(4, 4, w - 8, h - 8); });
   clip('grime', (w, h) => { const gr = g.createLinearGradient(0, h, 0, 0); gr.addColorStop(0, 'rgba(22,19,15,0.75)'); gr.addColorStop(0.35, 'rgba(26,22,17,0.35)'); gr.addColorStop(1, 'rgba(30,26,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(20,17,13,${r() * 0.25})`; g.fillRect(r() * w, h * (0.4 + r() * 0.6), 1 + r() * 6, r() * h * 0.5); } });
   clip('stain_water', (w, h) => { for (let i = 0; i < 26; i++) { const x = w * (0.2 + r() * 0.6), len = h * (0.3 + r() * 0.7), wd = 2 + r() * 10; const gr = g.createLinearGradient(0, 0, 0, len); gr.addColorStop(0, 'rgba(40,36,28,0.0)'); gr.addColorStop(0.15, 'rgba(48,42,30,0.35)'); gr.addColorStop(1, 'rgba(52,44,30,0)'); g.fillStyle = gr; g.fillRect(x, 0, wd, len); } });
@@ -272,4 +273,9 @@ export function makeDecalAtlas(scale = 1) {
   t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
   return { texture: t, bytes: S * S * 4 * 4 / 3 };
+}
+
+// photo decals (null when missing: the drawn version is used)
+export function loadImage(src) {
+  return new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
 }

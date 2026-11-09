@@ -4,7 +4,7 @@ import { PROFILES, detectProfile } from './config/quality.js';
 import { sectorB } from './world/level.js';
 import { ZoneManager } from './world/zoneManager.js';
 import { F_SHOOT } from './world/grid.js';
-import { makeMaterialArrays, makeDecalAtlas, loadPhotoLayers } from './render/textures.js';
+import { makeMaterialArrays, makeDecalAtlas, loadPhotoLayers, loadImage } from './render/textures.js';
 import { U } from './render/shaders.js';
 import { Input } from './core/input.js';
 import { Perf } from './core/perf.js';
@@ -41,7 +41,7 @@ async function boot() {
   const photos = await loadPhotoLayers(Q.tex);
   const arrays = makeMaterialArrays(Q.tex, Q.aniso, photos);
   perf.notes.photos = Object.keys(photos).join(', ') || 'none';
-  const atlas = makeDecalAtlas(Q.decalScale);
+  const atlas = makeDecalAtlas(Q.decalScale, { vent: await loadImage('textures/vent.webp') });
   perf.texBytes += arrays.bytes + atlas.bytes;
   perf.notes.materials = `${(performance.now() - t).toFixed(0)} ms (${Q.tex}px x13 layers)`;
   U.uGrain.value = Q.grain; U.uVignette.value = Q.vignette;
