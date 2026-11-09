@@ -184,7 +184,7 @@ export class AudioEngine {
       magout_r: n('akMagOut', 3), magin_r: ['akMagIn1'], bolt_r: n('akRackFwd', 2),
       magout_p: n('glkMagOut', 2), magin_p: n('glkMagIn', 2), bolt_p: ['glkSlideRel'],
       casing_r: n('brassM', 8), casing_p: n('brassS', 5), cloth: n('cloth', 7),
-      doorStop: n('doorShut', 3), hvac: ['ambServer'], breath: ['breaths'], boom: n('nadeBoom', 2), magdrop: n('magDrop', 3),
+      doorStop: n('doorShut', 3), panelOpen: n('doorOpen', 3), click: n('btnClick', 4), hvac: ['ambServer'], breath: ['breaths'], boom: n('nadeBoom', 2), magdrop: n('magDrop', 3),
     };
     const t0 = performance.now(), dec = {};
     const load = async f => { try { const r = await fetch(`sounds/${f}.mp3`); if (!r.ok) return null; return await this.ctx.decodeAudioData(await r.arrayBuffer()); } catch (e) { return null; } };

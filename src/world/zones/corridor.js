@@ -1,5 +1,6 @@
 // Sector B main corridor (start zone). Interior x[-1.6,1.6] z[0,28] h 3.0
 import { zone, cableTray } from '../kit.js';
+import { PANEL, PANEL_DOOR } from '../../config/panel.js';
 
 const COOL = [0.93, 1.0, 0.95];
 
@@ -51,11 +52,16 @@ export default function corridor() {
   z.pipe([-1.47, 0.6, 11.4], [-1.47, 1.15, 11.4], 0.085, 'steelRed', { collide: true });
   z.box([-1.6, 0.85, 11.33], [-1.55, 1.25, 11.47], 'steelDark', { collide: false });
   z.decal([-1.599, 1.55, 11.4], [1, 0, 0], 0.36, 0.26, 'sign_fire');
-  z.box([-1.6, 1.15, 15.4], [-1.42, 2.0, 16.3], 'steelGrey');
+  // electrical panel: the steel housing is baked here; frame, hinged door and breakers are game/panel.js (PANEL)
+  const P = PANEL, D = PANEL_DOOR;
+  z.box([P.back, P.y0, D.zh], [P.x, P.y1, P.z1], 'steelGrey');      // hinge side
+  z.box([P.back, P.y0, P.z0], [P.x, P.y1, D.z2], 'steelGrey');      // latch side
+  z.box([P.back, D.yb, D.z2], [P.x, P.y1, D.zh], 'steelGrey');      // top
+  z.box([P.back, P.y0, D.z2], [P.x, D.ya, D.zh], 'steelGrey');      // bottom
   z.box([-1.6, 1.3, 16.5], [-1.48, 1.8, 16.95], 'steelGrey');
-  z.box([-1.59, 2.0, 15.82], [-1.53, 3.0, 15.88], 'steel', { collide: false });
+  z.box([-1.59, P.y1, 15.82], [-1.53, 3.0, 15.88], 'steel', { collide: false });
   z.box([-1.59, 1.8, 16.7], [-1.53, 3.0, 16.76], 'steel', { collide: false });
-  z.box([-1.43, 1.85, 15.6], [-1.418, 1.87, 15.62], 'diffuser', { collide: false, occlude: false, emit: { face: 0, color: [0.2, 1.0, 0.3], power: 6 } });
+  z.box([-1.481, 1.71, 16.71], [-1.469, 1.73, 16.73], 'diffuser', { collide: false, occlude: false, emit: { face: 0, color: [0.2, 1.0, 0.3], power: 6 } });
   // bench
   z.box([-1.6, 0.42, 6.4], [-1.24, 0.47, 7.8], 'steelOlive');
   z.box([-1.55, 0, 6.5], [-1.3, 0.42, 6.56], 'steelOlive');

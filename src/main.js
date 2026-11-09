@@ -15,6 +15,8 @@ import { GunSystem } from './game/guns.js';
 import { Hands } from './game/hands.js';
 import { XR } from './core/xr.js';
 import { SlidingDoor, Targets } from './game/props.js';
+import { ElectricPanel } from './game/panel.js';
+import { LaunchDoor } from './game/keypad.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -78,6 +80,8 @@ async function boot() {
   targets = new Targets(scene, arrays, audio, effects);
   for (const rz of zm.loaded.values()) if (rz.z.targets.length) targets.setZone(rz.id, rz.z.targets);
   door = new SlidingDoor(sector.doors[0], scene, arrays, zm, audio);
+  const panel = new ElectricPanel(scene, audio);
+  const launch = new LaunchDoor(scene, audio);
   door.sync();
   let fogTarget = z0.fogDensity; U.uFogDensity.value = fogTarget; U.uFogColor.value.setRGB(...z0.fog);
 
@@ -109,7 +113,12 @@ async function boot() {
   }
 
   // ---- interaction ----
-  const useTargets = [...sector.doors[0].panels.map(p => ({ pos: p.pos, r: 0.6 })), { pos: door.center, r: 1.1 }];
+  const doorUse = { label: () => door.target > 0.5 ? 'CLOSE DOOR' : 'OPEN DOOR', act: () => door.toggle() };
+  const useTargets = [...sector.doors[0].panels.map(p => ({ pos: p.pos, r: 0.6, ...doorUse })), { pos: door.center, r: 1.1, ...doorUse },
+    { pos: panel.center, r: 0.42, near: 1.6, label: () => panel.target > 0.5 ? 'CLOSE PANEL' : 'OPEN PANEL', act: () => panel.toggle() },
+    { pos: launch.pad, r: 0.2, near: 1.8, label: () => 'USE READER', act: () => { const m = launch.request(); if (m) toast(m); } },
+    { pos: launch.center, r: 1.0, near: 2.4, label: () => 'OPEN DOOR', act: () => { const m = launch.request(); if (m) toast(m); } }];
+  let useHit = null;
   let xr = null;
   let VIEW = camera; // world-space head (the XR rig's stand-in in VR)
   const _ro = new THREE.Vector3(), _rd = new THREE.Vector3();
@@ -118,11 +127,11 @@ async function boot() {
     if (xr && xr.on && xr.rightRay(_ro, _rd)) { c = _ro; f = _rd; } // VR: point with the right hand
     for (const u of useTargets) {
       const dx = u.pos[0] - c.x, dy = u.pos[1] - c.y, dz = u.pos[2] - c.z, d = Math.hypot(dx, dy, dz);
-      if (d > 2.2) continue;
+      if (d > (u.near || 2.2)) continue;
       const along = dx * f.x + dy * f.y + dz * f.z, perp = Math.sqrt(Math.max(0, d * d - along * along));
-      if (along > 0 && perp < u.r) return door.target > 0.5 ? 'CLOSE DOOR' : 'OPEN DOOR';
+      if (along > 0 && perp < u.r) { useHit = u; return u.label(); }
     }
-    return null;
+    useHit = null; return null;
   }
 
   // ---- light probe for moving objects (weapon, door, plates, cases) ----
@@ -294,7 +303,7 @@ async function boot() {
       player.update(dt, input, weapons.aiming);
       if (xr.on) { xr.rig.position.x += player.pos.x - px0; xr.rig.position.z += player.pos.z - pz0; } // stick moves carry the headset
       perf.time('player', performance.now() - t1);
-      if (input.has('use') && interactPrompt()) door.toggle();
+      if (input.has('use') && interactPrompt()) useHit.act();
     }
     if (xr.on) { xr.rig.position.y = player.pos.y; xr.rig.updateMatrixWorld(true); }
     else {
@@ -306,7 +315,7 @@ async function boot() {
     let t1 = performance.now();
     zm.update(V);
     perf.time('zones', performance.now() - t1);
-    door.update(dt, player.pos);
+    door.update(dt, player.pos); panel.update(dt); if (zm.current === 'corridor') panel.probe(sampleProbe); launch.update(dt); if (zm.current === 'silo') launch.probe(sampleProbe);
     targets.update(dt);
     if (running) weapons.update(dt, input, V, player); else weapons.update(0, { held: {}, has: () => false }, V, player);
     t1 = performance.now();

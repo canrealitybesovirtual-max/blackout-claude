@@ -155,7 +155,9 @@ export class Player {
       if (this.vel.y <= 0 && P.mx[k + 1] - p.y < 0.4) { p.y = P.mx[k + 1]; this.vel.y = 0; this.onGround = true; }
       else if (this.vel.y > 0 && P.mn[k + 1] > p.y + 0.3) { p.y = P.mn[k + 1] - this.h - 1e-4; this.vel.y = 0; } // only things overhead stop a rise
     }
-    if (p.y < -5) { p.y = 0.5; this.vel.set(0, 0, 0); } // safety net
+    // safety net: below every floor (the silo drop is a painted abyss), back to the last solid footing
+    if (this.onGround && this.vel.y === 0) { this._safeT = (this._safeT || 0) + dt; if (this._safeT > 0.25) { this._safeT = 0; (this.safe || (this.safe = p.clone())).copy(p); } }
+    if (p.y < -1.0) { if (this.safe) p.copy(this.safe); else p.y = 0.5; this.vel.set(0, 0, 0); this.fell = true; }
   }
   _surface() {
     const g = this.zm.grid, p = this.pos;

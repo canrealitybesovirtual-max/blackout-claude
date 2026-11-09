@@ -102,7 +102,11 @@ async function loadRig(def, fresh) {
   const muzzle = new THREE.Object3D(); host.add(muzzle); host.updateWorldMatrix(true, false);
   muzzle.position.copy(host.worldToLocal(tip.clone()));
   const handR = findBone(root, /^Hand_R(?!.*end)/), handL = findBone(root, /^Hand_L(?!.*end)/);
-  const up = new THREE.Vector3(0, 1, 0), r = new THREE.Vector3().crossVectors(d, up).normalize(), u = new THREE.Vector3().crossVectors(r, d);
+  // the gun's own up: from the bore at the muzzle to the front sight post (the pack holds its guns canted a little;
+  // shown upright, as a shooter holds one)
+  const up = front.p.clone().sub(tip); up.addScaledVector(d, -up.dot(d));
+  if (up.length() < 0.01 * L || up.dot(u0) < 0.3 * up.length()) up.copy(u0); else up.normalize();
+  const r = new THREE.Vector3().crossVectors(d, up).normalize(), u = new THREE.Vector3().crossVectors(r, d);
   const basis = new THREE.Matrix4().makeBasis(r, u, d.clone().negate()); // camera axes in the file
   const toCam = new THREE.Quaternion().setFromRotationMatrix(basis).invert();
   // the pack's own camera: Head_Cam's local axis nearest the bore is its view, nearest file-up its up
@@ -142,7 +146,7 @@ export class GunSystem {
     // aimed pose: rear sight onto the eye line (the sight line already runs along -z)
     const R = rig.rearSight.clone().multiplyScalar(rig.scale).applyQuaternion(rig.toCam).add(inner.position);
     rig.adsOff = new THREE.Vector3(-R.x, -R.y - GUNS[id].eyeH, Math.min(0, -GUNS[id].eyeZ - R.z));
-    rig.hipRot = rig.hipQ.clone().multiply(rig.toCam.clone().invert());   // holder turn that restores the pack's framing
+    rig.hipRot = new THREE.Quaternion();   // hip: bore straight ahead, gun upright (the pack's own framing was canted)
     const f = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.flashMat); f.visible = false; f.frustumCulled = false; f.renderOrder = 5;
     rig.muzzle.add(f); rig.flash = f; rig.holder = holder; rig.id = id;
     // where the muzzle sits in camera space (for the aimed pose)

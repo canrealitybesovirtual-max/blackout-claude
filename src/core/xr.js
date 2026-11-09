@@ -70,7 +70,8 @@ export class XR {
     this.rig.add(this.camera); this.camera.position.set(0, 0, 0); this.camera.quaternion.identity();
     this.player.intro = 1; this.player.pitch = 0;
     this.input.device = 'xr';
-    this.placeRig(true);
+    this.placeRig(true); this.needCenter = true;
+    const ref = r.xr.getReferenceSpace(); if (ref && ref.addEventListener) ref.addEventListener('reset', () => { this.needCenter = true; });
     session.addEventListener('end', () => {
       this.on = false; this.session = null;
       if (this.torch) { this._holsterTorch(false); this.holster.visible = false; }
@@ -109,7 +110,8 @@ export class XR {
     const h = this.headWorld(this._h);
     const dx = h.x - P.pos.x, dz = h.z - P.pos.z;
     if (dx * dx + dz * dz > 1e-6) {
-      if (dx * dx + dz * dz > 1) { P.pos.x = h.x; P.pos.z = h.z; } // recentre / teleport: follow
+      // first frame, a recentre or a jump: bring the headset back over the body (never move the body without collision)
+      if ((this.needCenter && this.camera.position.lengthSq() > 0.25) || dx * dx + dz * dz > 0.36) { this.needCenter = false; rig.position.x -= dx; rig.position.z -= dz; rig.updateMatrixWorld(true); this.headWorld(h); }
       else P.walkTo(dx, dz);
       rig.position.x += P.pos.x - h.x; rig.position.z += P.pos.z - h.z;
       rig.updateMatrixWorld(true);

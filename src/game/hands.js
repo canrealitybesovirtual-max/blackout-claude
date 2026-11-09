@@ -40,6 +40,46 @@ function placeTorch(torch, info) {
   torch.position.set(info.axis.x, info.axis.y, info.axis.z - 0.02);
 }
 
+// close the fingers and thumb round the torch body: each joint, base to tip, turns about the torch's axis
+// until the next joint or the tip would go inside the glove-padded surface (or it reaches 1.5 rad)
+const _a = new THREE.Vector3(), _t = new THREE.Vector3(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _wq = new THREE.Quaternion();
+function wrapFingers(info, holder, radius) {
+  holder.updateWorldMatrix(true, false);
+  _a.setFromMatrixPosition(holder.matrixWorld); _t.set(0, 0, 1).transformDirection(holder.matrixWorld);
+  const rad = p => { _p.copy(p).sub(_a); return _p.addScaledVector(_t, -_p.dot(_t)).length(); };
+  const fore = info.hand.parent && info.hand.parent.isBone ? info.hand.parent : info.hand;
+  const chains = [];
+  for (const root of [...info.hand.children, ...fore.children]) {
+    if (!root.isBone || root === info.hand) continue;
+    const c = []; let b = root; while (b && b.isBone) { c.push(b); b = b.children.find(k => k.isBone); }
+    if (c.length >= 2) chains.push(c);
+  }
+  const pts = c => c.map(b => b.getWorldPosition(new THREE.Vector3()));
+  // flexion: turn the bone so its direction bends toward the torch axis (about the axis across the finger)
+  const _ax = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3(), _j = new THREE.Vector3(), _c = new THREE.Vector3();
+  const curl = (b, child, ang) => {
+    b.getWorldPosition(_j); child.getWorldPosition(_c);
+    _d.copy(_c).sub(_j).normalize();
+    _n.copy(_a).sub(_j); _n.addScaledVector(_t, -_n.dot(_t)).normalize();          // from the joint to the axis
+    _ax.crossVectors(_d, _n); if (_ax.lengthSq() < 1e-8) return false; _ax.normalize();
+    b.getWorldQuaternion(_wq); b.parent.getWorldQuaternion(_pq);
+    _q.setFromAxisAngle(_ax, ang);
+    b.quaternion.copy(_pq.invert().multiply(_q).multiply(_wq)); b.updateWorldMatrix(false, true);
+    return true;
+  };
+  for (const c of chains) {
+    for (let j = 0; j < c.length - 1; j++) {
+      const saved = c.map(b => b.quaternion.clone());
+      for (let a = 0; a < 1.6; a += 0.05) {
+        const before = c.map(b => b.quaternion.clone());
+        if (!curl(c[j], c[j + 1], 0.05)) break;
+        if (pts(c.slice(j + 1)).some(q => rad(q) < radius)) { c.forEach((b, i) => b.quaternion.copy(before[i])); c[0].parent.updateWorldMatrix(false, true); break; }
+      }
+      void saved;
+    }
+  }
+}
+
 async function build(fresh) {
   const [h, f] = await Promise.all([loadGLB(HANDS_URL, fresh), loadGLB(TORCH_URL, fresh)]);
   const arms = h.scene, info = analyse(arms);
@@ -52,6 +92,8 @@ async function build(fresh) {
   const holder = new THREE.Group(); torch.position.sub(tc); holder.add(torch);
   placeTorch(holder, info);
   arms.add(holder);
+  arms.updateMatrixWorld(true);
+  wrapFingers(info, holder, 0.0285 * holder.scale.x + 0.012);   // body radius + glove
   return { arms, torch: holder, info, len: tb.max.z - tb.min.z };
 }
 
@@ -68,7 +110,7 @@ export class Hands {
     this.sway = new THREE.Vector2(); this.swayV = new THREE.Vector2(); this.t = 0;
     this.lastYaw = null; this.lastPitch = 0;
     // hip pose: torch ~0.42 m ahead, 0.2 m down, 0.13 m left of the eye (the file's grip sits near its origin)
-    this.base = new THREE.Vector3(-0.12, -0.165, -0.4);
+    this.base = new THREE.Vector3(-0.11, -0.135, -0.38);
     build(false).then(r => {
       this.model = r; if (r.info.firing) r.info.firing.visible = false;   // right arm waits for a gun
       const a = r.torch.position;                                           // torch centre in the file

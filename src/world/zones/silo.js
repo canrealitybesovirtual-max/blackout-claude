@@ -79,6 +79,8 @@ export default function silo() {
   z.box([-1.25, 2.4, 64.92], [1.25, 2.65, 65.4], 'hazard');
   z.decal([0, 1.2, 64.999], [0, 0, -1], 2.0, 2.4, 'door_yellow');   // photo: scratched yellow steel (drawn first: the sign sits on it)
   z.decal([0, 2.05, 64.999], [0, 0, -1], 1.1, 0.48, 'sign_silo');
+  // key / code reader on the frame's right pillar (its face, LCD and LED are game/keypad.js)
+  z.box([1.035, 1.115, 64.855], [1.215, 1.385, 64.92], 'steelDark', { collide: false, occlude: false });
 
   // ---- light: work lights under the lid, floods under the decks (they light the drop), wall bulkheads
   for (const [x, zz] of [[-3.2, cz], [3.2, cz], [0, cz - 3.4], [0, cz + 3.4]]) z.light(x, SILO.top, zz, { axis: 'z', color: COOL, power: 115, drop: 0.5, housing: 'steelDark' });
