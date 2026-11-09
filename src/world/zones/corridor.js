@@ -27,8 +27,8 @@ export default function corridor() {
     z.box([-1.6, 2.76, c - 0.18], [1.6, 3.0, c + 0.18], 'conc');
     z.box([-1.6, 2.63, c - 0.03], [-0.97, 2.66, c + 0.03], 'steelGrey', { collide: false, occlude: false });
   }
-  // lights between the beams; the last one is dead
-  for (const c of [4, 8, 12, 16, 20, 24]) z.light(0, 3.0, c, { axis: 'z', color: COOL, power: 34, on: c !== 24 });
+  // lights between the beams; the last one has a failing tube (flickers)
+  for (const c of [4, 8, 12, 16, 20, 24]) z.light(0, 3.0, c, { axis: 'z', color: COOL, power: 34, flicker: c === 24 });
 
   // services along the ceiling
   z.pipe([-1.25, 2.53, 0], [-1.25, 2.53, 28], 0.07, 'pipeGreen', { flange: 3 });

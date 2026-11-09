@@ -17,6 +17,7 @@ import { XR } from './core/xr.js';
 import { SlidingDoor, Targets } from './game/props.js';
 import { ElectricPanel } from './game/panel.js';
 import { LaunchDoor } from './game/keypad.js';
+import { Fixtures } from './game/fixtures.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -82,6 +83,7 @@ async function boot() {
   door = new SlidingDoor(sector.doors[0], scene, arrays, zm, audio);
   const panel = new ElectricPanel(scene, audio);
   const launch = new LaunchDoor(scene, audio);
+  const fixtures = new Fixtures(scene, sector, zm, audio);
   door.sync();
   let fogTarget = z0.fogDensity; U.uFogDensity.value = fogTarget; U.uFogColor.value.setRGB(...z0.fog);
 
@@ -335,6 +337,7 @@ async function boot() {
     muzzleT -= dt;
     if (muzzleT > 0) { const k = muzzleT / 0.06; U.uDynPos.value[n].set(muzzlePos.x, muzzlePos.y, muzzlePos.z, 9); U.uDynCol.value[n].set(30 * k, 17 * k, 7 * k, 0); n++; }
     U.uDynCount.value = n;
+    fixtures.update(dt, VIEW.position);
 
     fwd.set(0, 0, -1).applyQuaternion(V.quaternion); up.set(0, 1, 0).applyQuaternion(V.quaternion);
     audio.setListener(V.position, fwd, up);

@@ -5,7 +5,7 @@
 export function zone(id, name, min, max, o = {}) {
   const z = {
     id, name, volume: { min, max }, neighbors: o.neighbors || [], portals: [],
-    boxes: [], cyls: [], lights: [], decals: [], targets: [], emitters: [],
+    boxes: [], cyls: [], lights: [], decals: [], targets: [], emitters: [], fixtures: [],
     reverb: o.reverb || 'corridor', ambience: o.ambience || 'vent',
     fog: o.fog || [0.010, 0.011, 0.012], fogDensity: o.fogDensity ?? 0.035,
   };
@@ -36,7 +36,7 @@ export function zone(id, name, min, max, o = {}) {
     const len = opt.len ?? 1.2, wid = opt.wid ?? 0.2, axis = opt.axis || 'z', drop = opt.drop ?? 0;
     const hx = axis === 'x' ? len / 2 : wid / 2, hz = axis === 'x' ? wid / 2 : len / 2;
     const top = y - drop, bot = top - (opt.depth ?? 0.07);
-    const color = opt.color || [1, 1, 1], power = opt.power ?? 35, on = opt.on ?? true;
+    const color = opt.color || [1, 1, 1], power = opt.power ?? 35, flicker = !!opt.flicker, on = (opt.on ?? true) && !flicker;   // a failing tube is not baked: game/fixtures.js lights it
     z.box([x - hx - 0.03, bot, zz - hz - 0.03], [x + hx + 0.03, top, zz + hz + 0.03],
       { all: opt.housing || 'steelGrey', ny: 'diffuser' },
       { emit: { face: 2, color, power: on ? power : 0 }, occlude: true });
@@ -51,6 +51,7 @@ export function zone(id, name, min, max, o = {}) {
       }
     }
     if (on) z.lights.push({ c: [x, bot - 0.012, zz], hx, hz, color, power });
+    if (len >= 0.4) z.fixtures.push({ c: [x, bot, zz], hx, hz, axis, on: on || flicker, flicker, color, power });   // photo diffuser (game/fixtures.js)
     return z;
   };
 
