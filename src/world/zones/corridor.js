@@ -31,10 +31,16 @@ export default function corridor() {
   for (const c of [4, 8, 12, 16, 20, 24]) z.light(0, 3.0, c, { axis: 'z', color: COOL, power: 34, flicker: c === 24 });
 
   // services along the ceiling
-  z.pipe([-1.25, 2.53, 0], [-1.25, 2.53, 28], 0.07, 'pipeGreen', { flange: 3 });
-  z.pipe([-1.04, 2.57, 0], [-1.04, 2.57, 28], 0.04, 'pipeYellow', { flange: 4 });
-  z.pipe([-1.27, 2.3, 0], [-1.27, 2.3, 28], 0.045, 'steelGrey', { flange: 3 });
-  cableTray(z, 0, 28, 2.5, 1.02, 1.42);
+  // they come down through the ceiling clear of the blast-door frame (z 0..0.26) and run to the tunnel wall
+  const Z0 = 0.62;
+  for (const [x, y, r, mat, fl] of [[-1.25, 2.53, 0.07, 'pipeGreen', 3], [-1.04, 2.57, 0.04, 'pipeYellow', 4], [-1.27, 2.3, 0.045, 'steelGrey', 3]]) {
+    const zr = Z0 - (y < 2.4 ? 0.2 : 0);                                  // staggered risers
+    z.pipe([x, y, zr], [x, y, 28], r, mat, { flange: fl });
+    z.pipe([x, y - r * 0.3, zr], [x, 3.0, zr], r, mat);                    // riser into the slab
+    z.pipe([x, 2.94, zr], [x, 3.0, zr], r * 1.35, mat, { occlude: false }); // ceiling collar
+  }
+  cableTray(z, 0.4, 28, 2.5, 1.02, 1.42);
+  z.box([1.02, 2.5, 0.38], [1.42, 3.0, 0.4], 'steel', { collide: false });   // tray turns up into the ceiling
 
   // south end: sealed blast door B1
   z.box([-1.32, 0, 0], [-0.006, 2.7, 0.18], 'steelGrey');
@@ -43,8 +49,6 @@ export default function corridor() {
   z.box([1.32, 0, 0], [1.6, 2.96, 0.26], 'hazard');
   z.box([-1.32, 2.7, 0], [1.32, 2.96, 0.26], 'hazard');
   for (const y of [0.95, 1.85]) z.box([-1.05, y, 0.18], [1.05, y + 0.12, 0.25], 'steelDark');
-  z.pipe([-1.2, 0.3, 0.32], [-1.2, 2.4, 0.32], 0.05, 'steel', { collide: false });
-  z.pipe([1.2, 0.3, 0.32], [1.2, 2.4, 0.32], 0.05, 'steel', { collide: false });
   z.decal([0, 2.32, 0.255], [0, 0, 1], 1.5, 0.5, 'sign_blast');
   z.decal([0, 0.001, 0.75], [0, 1, 0], 3.0, 0.9, 'hazardFloor');
 
