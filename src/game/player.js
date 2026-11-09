@@ -141,7 +141,7 @@ export class Player {
     for (let i = 0; i < n; i++) {
       const k = this._hits[i] * 3;
       if (this.vel.y <= 0 && P.mx[k + 1] - p.y < 0.4) { p.y = P.mx[k + 1]; this.vel.y = 0; this.onGround = true; }
-      else if (this.vel.y > 0) { p.y = P.mn[k + 1] - this.h - 1e-4; this.vel.y = 0; }
+      else if (this.vel.y > 0 && P.mn[k + 1] > p.y + 0.3) { p.y = P.mn[k + 1] - this.h - 1e-4; this.vel.y = 0; } // only things overhead stop a rise
     }
     if (p.y < -5) { p.y = 0.5; this.vel.set(0, 0, 0); } // safety net
   }

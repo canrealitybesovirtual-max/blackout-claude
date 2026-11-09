@@ -39,3 +39,6 @@ Add a zone: new file in `src/world/zones`, list it in `level.js` with neighbours
 - [x] Hitscan, impacts per surface, bullet holes, sparks, smoke, ejected cases, steel targets
 - [x] Keyboard/mouse, controller, touch
 - [ ] Enemy AI · more of the facility · XR session · real photo textures / recorded audio
+
+## Photo textures (user-supplied)
+`textures/src/*.png` are the originals; `python3 tools/prep_photos.py` makes the game copies (seamless, de-lit, albedo calibrated to the layer value, 512 px WebP). Floors use `concrete.webp`, ceilings / tunnel walls `ceiling.webp`; relief and roughness come from the photo's detail. Missing file = the generated layer.

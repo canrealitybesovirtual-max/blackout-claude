@@ -29,8 +29,8 @@ export const LAYER_ALBEDO = [
 // key -> { layer, tint (linear multiplier), scale (metres per texture tile), step, impact }
 // step: footstep surface, impact: bullet impact class
 export const MATERIALS = {
-  floor:      { layer: 0, tint: [1, 1, 1],          scale: 2.0, step: 'concrete', impact: 'concrete' },
-  floorDark:  { layer: 0, tint: [0.78, 0.78, 0.8],  scale: 2.0, step: 'concrete', impact: 'concrete' },
+  floor:      { layer: 0, tint: [1, 1, 1],          scale: 1.4, step: 'concrete', impact: 'concrete' },
+  floorDark:  { layer: 0, tint: [0.78, 0.78, 0.8],  scale: 1.4, step: 'concrete', impact: 'concrete' },
   wallLower:  { layer: 1, tint: [0.36, 0.42, 0.35], scale: 1.6, step: 'concrete', impact: 'concrete' },
   wallUpper:  { layer: 1, tint: [0.82, 0.82, 0.78], scale: 1.6, step: 'concrete', impact: 'concrete' },
   wallGrey:   { layer: 1, tint: [0.52, 0.54, 0.55], scale: 1.6, step: 'concrete', impact: 'concrete' },

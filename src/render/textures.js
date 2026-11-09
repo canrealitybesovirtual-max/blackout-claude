@@ -140,13 +140,53 @@ const GEN = {
 };
 const NORMAL_STRENGTH = { concrete: 3, block: 4, ceiling: 4, paintsteel: 2, steel: 1, hazard: 2, polymer: 1.5, wood: 3, gunmetal: 1, brass: 0.5, diffuser: 2, fabric: 2, plate: 6 };
 
-export function makeMaterialArrays(size, anisotropy = 1) {
+// photo layers: albedo straight from the calibrated photo, relief and roughness from its detail
+const PHOTO = {
+  concrete: { rough: 0.62, rk: 0.45, tm: 0, ks: 2.2 },
+  ceiling: { rough: 0.86, rk: 0.25, tm: 1, ks: 2.6 },
+};
+// load photo layers (null = keep the generated layer); drawn at the profile's size
+export async function loadPhotoLayers(size, base = 'textures/') {
+  const out = {};
+  await Promise.all(Object.keys(PHOTO).map(name => new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = size;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      g.imageSmoothingQuality = 'high'; g.drawImage(im, 0, 0, size, size);
+      out[name] = g.getImageData(0, 0, size, size).data; res();
+    };
+    im.onerror = () => res();
+    im.src = base + name + '.webp';
+  })));
+  return out;
+}
+
+export function makeMaterialArrays(size, anisotropy = 1, photos = {}) {
   const L = LAYERS.length, N = size * size;
   const alb = new Uint8Array(N * 4 * L), nrm = new Uint8Array(N * 4 * L);
   const h = new Float32Array(N), o = { h: 0, r: 0, g: 0, b: 0, ro: 0, me: 0, tm: 0 };
   const toS = c => { c = sat(c); return Math.round((c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055) * 255); };
   for (let l = 0; l < L; l++) {
-    const gen = GEN[LAYERS[l]], base = N * 4 * l, ks = NORMAL_STRENGTH[LAYERS[l]] * size / 256;
+    const gen = GEN[LAYERS[l]], base = N * 4 * l;
+    let ks = NORMAL_STRENGTH[LAYERS[l]] * size / 256;
+    const ph = photos[LAYERS[l]], pd = PHOTO[LAYERS[l]];
+    if (ph) {
+      // linear luminance, its local mean (box 1/16 of the tile, wrapped), detail = relief
+      const lum = new Float32Array(N), sl = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      for (let i = 0; i < N; i++) lum[i] = sl(ph[i * 4]) * 0.2126 + sl(ph[i * 4 + 1]) * 0.7152 + sl(ph[i * 4 + 2]) * 0.0722;
+      const r = Math.max(2, size >> 4), tmp = new Float32Array(N), mean = new Float32Array(N);
+      for (let y = 0; y < size; y++) { let acc = 0; for (let k = -r; k <= r; k++) acc += lum[y * size + ((k + size) % size)]; for (let x = 0; x < size; x++) { tmp[y * size + x] = acc / (2 * r + 1); acc += lum[y * size + (x + r + 1) % size] - lum[y * size + (x - r + size) % size]; } }
+      for (let x = 0; x < size; x++) { let acc = 0; for (let k = -r; k <= r; k++) acc += tmp[((k + size) % size) * size + x]; for (let y = 0; y < size; y++) { mean[y * size + x] = acc / (2 * r + 1); acc += tmp[((y + r + 1) % size) * size + x] - tmp[((y - r + size) % size) * size + x]; } }
+      for (let i = 0; i < N; i++) {
+        const rel = lum[i] / Math.max(1e-4, mean[i]) - 1, q = base + i * 4;
+        h[i] = Math.max(-1, Math.min(1, rel * 1.6));
+        alb[q] = ph[i * 4]; alb[q + 1] = ph[i * 4 + 1]; alb[q + 2] = ph[i * 4 + 2];
+        alb[q + 3] = Math.round(sat(pd.rough - rel * pd.rk) * 255);   // pits and cracks rougher
+        nrm[q + 2] = pd.tm * 255; nrm[q + 3] = 0;
+      }
+      ks = pd.ks * size / 256;
+    } else
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
       gen((x + 0.5) / size, (y + 0.5) / size, o);
       const i = y * size + x, q = base + i * 4;

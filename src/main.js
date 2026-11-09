@@ -4,7 +4,7 @@ import { PROFILES, detectProfile } from './config/quality.js';
 import { sectorB } from './world/level.js';
 import { ZoneManager } from './world/zoneManager.js';
 import { F_SHOOT } from './world/grid.js';
-import { makeMaterialArrays, makeDecalAtlas } from './render/textures.js';
+import { makeMaterialArrays, makeDecalAtlas, loadPhotoLayers } from './render/textures.js';
 import { U } from './render/shaders.js';
 import { Input } from './core/input.js';
 import { Perf } from './core/perf.js';
@@ -37,7 +37,9 @@ async function boot() {
   status('Generating materials…');
   await new Promise(r => setTimeout(r, 0));
   let t = performance.now();
-  const arrays = makeMaterialArrays(Q.tex, Q.aniso);
+  const photos = await loadPhotoLayers(Q.tex);
+  const arrays = makeMaterialArrays(Q.tex, Q.aniso, photos);
+  perf.notes.photos = Object.keys(photos).join(', ') || 'none';
   const atlas = makeDecalAtlas(Q.decalScale);
   perf.texBytes += arrays.bytes + atlas.bytes;
   perf.notes.materials = `${(performance.now() - t).toFixed(0)} ms (${Q.tex}px x13 layers)`;
@@ -241,7 +243,7 @@ async function boot() {
   const fwd = new THREE.Vector3(), up = new THREE.Vector3(), lp = new THREE.Vector3(), ld = new THREE.Vector3();
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // rAF time can precede the start() stamp
     const c0 = performance.now();
     U.uTime.value = now / 1000;
     renderer.info.reset();
