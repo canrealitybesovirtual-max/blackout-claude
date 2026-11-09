@@ -285,7 +285,7 @@ async function boot() {
       U.uGrain.value = 0; U.uVignette.value = 0;
       if (!xr.modelsLoaded) {   // hand models for the controllers (built once)
         xr.modelsLoaded = true;
-        Promise.all([(weapons.hands || weapons).makeVR(), weapons.hands ? weapons.makeVR() : null]).then(([h, g]) => { xr.setModels({ left: h && h.left, torch: h && h.torch, len: h && h.len, fingers: h && h.fingers, rightHand: h && h.rightHand, rFingers: h && h.rFingers, right: g, guns: weapons.vrGun ? weapons : null }); }).catch(e => console.error('vr models', e));
+        Promise.all([(weapons.hands || weapons).makeVR(), weapons.hands ? weapons.makeVR() : null]).then(([h, g]) => { xr.setModels({ left: h && h.left, torch: h && h.torch, len: h && h.len, fingers: h && h.fingers, rightHand: h && h.rightHand, rFingers: h && h.rFingers, wristL: h && h.wristL, wristR: h && h.wristR, right: g, guns: weapons.vrGun ? weapons : null }); }).catch(e => console.error('vr models', e));
       }
       await xr.enter(); weapons.vrOn = true;
     }

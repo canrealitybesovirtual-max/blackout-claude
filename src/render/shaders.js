@@ -445,7 +445,7 @@ ${COMMON}
 vec3 ambCube(vec3 n){ vec3 s = n * n; return s.x * (n.x > 0.0 ? uAmb[0] : uAmb[1]) + s.y * (n.y > 0.0 ? uAmb[2] : uAmb[3]) + s.z * (n.z > 0.0 ? uAmb[4] : uAmb[5]); }
 void main(){
   float side = vPart > 9.5 ? 1.0 : 0.0, part = vPart - side * 10.0;   // +10 left arm, 2 upper arm
-  if (uCutUpper > 0.5 && part > 1.5) discard;
+  if (uCutUpper > 0.5 && part > 2.5 - uCutUpper) discard;   // 1: no upper arm, 2: glove only (the VR body's sleeves meet it)
   if (uHideLeft > 0.5 && side > 0.5) discard;
   vec4 A = uHas.x > 0.5 ? texture2D(uMap, vUv) : vec4(1.0);
   if (uHas.w > 0.0 && A.a < uHas.w) discard;

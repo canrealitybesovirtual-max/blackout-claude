@@ -198,14 +198,14 @@ export class Hands {
   async makeVR() {
     // left controller: the support arm holding the torch (torch centred on the grip, beam along it)
     const a = await build(true);
-    for (const m of [a.info.support, a.info.firing]) if (m) m.material.uniforms.uCutUpper.value = 1;
+    for (const m of [a.info.support, a.info.firing]) if (m) m.material.uniforms.uCutUpper.value = 2;   // glove only: the VR body's sleeve meets it
     if (a.info.firing) a.info.firing.visible = false;
     const g = new THREE.Group(), inner = new THREE.Group();
     inner.rotation.y = Math.PI; g.add(inner); inner.add(a.arms);   // the file looks down +z, the grip down -z
     a.arms.position.copy(a.torch.position).negate();
     // right controller, shown while the gun is out of the hand: the pack's firing arm, palm on the grip
     const b = await build(true);
-    for (const m of [b.info.support, b.info.firing]) if (m) m.material.uniforms.uCutUpper.value = 1;
+    for (const m of [b.info.support, b.info.firing]) if (m) m.material.uniforms.uCutUpper.value = 2;
     b.info.support.visible = false; b.torch.visible = false;
     const rh = b.info.fhand;
     let rFingers = null;
@@ -223,6 +223,6 @@ export class Hands {
       rFingers = fingerRig({ hand: rh }, grip); rFingers.save();
     }
     r.visible = false;
-    return { left: g, torch: a.torch, len: a.len, fingers: a.fingers, rightHand: r, rFingers };
+    return { left: g, torch: a.torch, len: a.len, fingers: a.fingers, rightHand: r, rFingers, wristL: a.info.hand, wristR: rh };
   }
 }

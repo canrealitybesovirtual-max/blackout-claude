@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { makeModelMaterial } from '../render/shaders.js';
 import { F_COLLIDE } from '../world/grid.js';
+import { VRBody } from '../game/body.js';
 
 const TURN = 1.92;      // rad/s at full stick (smooth turning)
 const DEAD = 0.15;
@@ -36,6 +37,8 @@ export class XR {
     if (m.torch) { this.torch = m.torch; this.torchLen = m.len; this._buildHolster(); }
     if (m.guns) this.guns = m.guns;
     if (m.fingers) this.fingers = m.fingers;
+    if (m.wristL) { this.wristL = m.wristL; this.wristR = m.wristR; }
+    if (!this.body) this.body = new VRBody(this.scene);
     if (m.rightHand) { this.rightHand = m.rightHand; this.rFingers = m.rFingers; if (this.hands.right) this.hands.right.ray.add(m.rightHand); }
   }
   // flashlight pouch on the left thigh: a slim open sleeve, nothing above the torch's head
@@ -78,7 +81,7 @@ export class XR {
     session.addEventListener('end', () => {
       this.on = false; this.session = null;
       if (this.gunHeld === false && this.hands.right && this.models.right) { this.hands.right.ray.add(this.models.right); this.models.right.quaternion.identity(); }
-      this.gunHeld = undefined; this._gripUsed = false; this.drop = null; this.rack = null;
+      this.gunHeld = undefined; this._gripUsed = false; this.drop = null; this.rack = null; if (this.body) this.body.hideAll();
       if (this.torch) { this._holsterTorch(false); this.holster.visible = false; }
       this._setSupport(false);
       this.scene.add(this.camera); this.input.device = 'kbm';
@@ -122,6 +125,11 @@ export class XR {
       rig.updateMatrixWorld(true);
     }
     this._leftHand(); this._rightHand(dt);
+    if (this.body && this.bodyYaw !== null && this.bodyYaw !== undefined) {   // the body under the headset, arms to the real wrists
+      const g = this.guns && this.guns.vrGun(), wr = this.gunHeld !== false && g && g.handR ? g.handR : this.wristR;
+      const P = o => o && o.parent && (o.updateWorldMatrix(true, false), new THREE.Vector3().setFromMatrixPosition(o.matrixWorld));
+      this.body.update(dt, this.headWorld(new THREE.Vector3()), this.bodyYaw, this.rig.position.y, this.headTop, this.hands.left ? P(this.wristL) : null, this.hands.right ? P(wr) : null);
+    }
     // the head's facing drives stick movement
     this.camera.getWorldQuaternion(this._q);
     const f = new THREE.Vector3(0, 0, -1).applyQuaternion(this._q);

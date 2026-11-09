@@ -29,6 +29,7 @@ function tagArms(mesh) {
     const n = b.name; let c = 0;
     if (/_L(\d|_|$)|\dL(_|$)|\.L/.test(n)) c += 10;            // Hand_L, Bone_L004, BoneTwist_03L
     if (/^(Arm|UpArm|Root)/.test(n) || /BoneTwist_0[3]/.test(n)) c += 2;
+    else if (/^Forearm|BoneTwist_0[12]/.test(n)) c += 1;          // forearm sleeve
     return c;
   });
   const a = new Float32Array(si.count);
@@ -336,7 +337,7 @@ export class GunSystem {
     const group = new THREE.Group();
     for (const id in GUNS) {
       const rig = await loadRig(GUNS[id], true);
-      for (const m of rig.mats) { m.uniforms.uCutUpper.value = 1; m.uniforms.uHideLeft.value = 1; }
+      for (const m of rig.mats) { m.uniforms.uCutUpper.value = 2; m.uniforms.uHideLeft.value = 1; }
       const holder = new THREE.Group(), inner = new THREE.Group();
       holder.add(inner); inner.add(rig.root);
       inner.quaternion.copy(rig.toCam); inner.scale.setScalar(rig.scale);
