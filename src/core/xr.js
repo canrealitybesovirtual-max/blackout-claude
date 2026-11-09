@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { makeModelMaterial } from '../render/shaders.js';
 import { F_COLLIDE } from '../world/grid.js';
 import { VRBody } from '../game/body.js';
+import { CqcBody } from '../game/cqcbody.js';
 
 const TURN = 1.92;      // rad/s at full stick (smooth turning)
 const DEAD = 0.15;
@@ -38,7 +39,7 @@ export class XR {
     if (m.guns) this.guns = m.guns;
     if (m.fingers) this.fingers = m.fingers;
     if (m.wristL) { this.wristL = m.wristL; this.wristR = m.wristR; }
-    if (!this.body) this.body = new VRBody(this.scene);
+    if (!this.cqc) this.cqc = new CqcBody(this);
     if (m.rightHand) { this.rightHand = m.rightHand; this.rFingers = m.rFingers; if (this.hands.right) this.hands.right.ray.add(m.rightHand); }
   }
   // flashlight pouch on the left thigh: a slim open sleeve, nothing above the torch's head
@@ -81,7 +82,7 @@ export class XR {
     session.addEventListener('end', () => {
       this.on = false; this.session = null;
       if (this.gunHeld === false && this.hands.right && this.models.right) { this.hands.right.ray.add(this.models.right); this.models.right.quaternion.identity(); }
-      this.gunHeld = undefined; this._gripUsed = false; this.drop = null; this.rack = null; if (this.body) this.body.hideAll();
+      this.gunHeld = undefined; this._gripUsed = false; this.drop = null; this.rack = null; if (this.body) this.body.hideAll(); if (this.cqc) this.cqc.hide(); this._cqcOn = undefined;
       if (this.torch) { this._holsterTorch(false); this.holster.visible = false; }
       this._setSupport(false);
       this.scene.add(this.camera); this.input.device = 'kbm';
@@ -125,7 +126,28 @@ export class XR {
       rig.updateMatrixWorld(true);
     }
     this._leftHand(); this._rightHand(dt);
-    if (this.body && this.bodyYaw !== null && this.bodyYaw !== undefined) {   // the body under the headset, arms to the real wrists
+    // CQC's hands and body (src/cqc/port.js); our own hand meshes hide while they show (the torch and the guns stay)
+    if (this.cqc) {
+      const g = this.guns && this.guns.vrGun(), held = this.gunHeld !== false && g;
+      const sup = this.support && g && g.handL ? g.handL.getWorldPosition(new THREE.Vector3()) : null;
+      const ok = this.cqc.update(dt, { gun: held ? g : null, long: this.guns && this.guns.cur === 'saiga', support: !!sup, supportAt: sup, torch: this.torch && !this.inHolster });
+      if (ok !== this._cqcOn) {
+        this._cqcOn = ok;
+        if (this.models.left) this.models.left.traverse(o => { if (o.isSkinnedMesh) o.visible = !ok; });
+      }
+      if (ok) {
+        if (this.rightHand) this.rightHand.visible = false; if (this.guns) this.guns.vrArms(false);
+        // the gun follows CQC's grip: its own hand bone onto the CQC hand's wrist
+        const R = this.hands.right, M = this.models.right;
+        if (held && R && g.handR && !this.support && this.cqc.rightWrist(this._a)) {
+          g.handR.updateWorldMatrix(true, false);
+          const d = this._a.sub(this._b.setFromMatrixPosition(g.handR.matrixWorld));
+          M.position.add(d.applyQuaternion(R.ray.getWorldQuaternion(this._q2).invert()));
+        }
+      }
+      else if (!this.body && this.cqc.failed) this.body = new VRBody(this.scene);
+    }
+    if (this.body && !this._cqcOn && this.bodyYaw !== null && this.bodyYaw !== undefined) {
       const g = this.guns && this.guns.vrGun(), wr = this.gunHeld !== false && g && g.handR ? g.handR : this.wristR;
       const P = o => o && o.parent && (o.updateWorldMatrix(true, false), new THREE.Vector3().setFromMatrixPosition(o.matrixWorld));
       this.body.update(dt, this.headWorld(new THREE.Vector3()), this.bodyYaw, this.rig.position.y, this.headTop, this.hands.left ? P(this.wristL) : null, this.hands.right ? P(wr) : null);
@@ -239,7 +261,7 @@ export class XR {
     // the empty hand: shown while the gun is out of it, on the grip, fingers from the controller
     const E = this.rightHand;
     if (E) {
-      E.visible = !this.gunHeld;
+      E.visible = !this.gunHeld && !this._cqcOn;
       if (E.visible) {
         R.ray.updateMatrixWorld(true); this._m.copy(R.ray.matrixWorld).invert().multiply(R.grip.matrixWorld); E.position.setFromMatrixPosition(this._m);
         if (this.rFingers) {
@@ -251,7 +273,7 @@ export class XR {
         }
       }
     }
-    if (this.guns) this.guns.vrArms(this.gunHeld !== false);
+    if (this.guns && !this._cqcOn) this.guns.vrArms(this.gunHeld !== false);
   }
   _fall(dt) {
     const D = this.drop, M = this.models.right, g = this.player.zm.grid; if (D.rest || !g) return;
