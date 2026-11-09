@@ -17,11 +17,12 @@ export default function tunnel() {
   z.portals.push({ to: 'corridor', min: [-0.6, 0, 28], max: [0.6, 2.2, 28.3] });
 
   // main water main on saddles, two service lines above
-  z.pipe([0.72, 0.45, 28.3], [0.72, 0.45, 50], 0.16, 'steelGrey', { collide: true, flange: 4 });
+  z.pipe([0.72, 0.45, 28.3], [0.72, 0.45, 50], 0.16, 'steelGrey', { flange: 4 });
+  z.box([0.53, 0, 28.3], [1.0, 1.0, 50], 'steel', { render: false, occlude: false });   // one smooth blocker: you slide along the pipes, never climb the saddles
   z.pipe([0.8, 1.1, 28.3], [0.8, 1.1, 50], 0.08, 'pipeGreen', { flange: 3 });
   z.pipe([0.83, 1.45, 28.3], [0.83, 1.45, 50], 0.055, 'pipeYellow', { flange: 3 });
   for (let c = 29.5; c < 50; c += 2) {
-    z.box([0.54, 0, c - 0.05], [0.9, 0.3, c + 0.05], 'steelDark');
+    z.box([0.54, 0, c - 0.05], [0.9, 0.3, c + 0.05], 'steelDark', { collide: false });
     z.box([0.94, 0.95, c - 0.025], [1.0, 1.6, c + 0.025], 'steelDark', { collide: false });
     z.box([0.7, 1.0, c - 0.02], [1.0, 1.02, c + 0.02], 'steelDark', { collide: false, occlude: false });
     z.box([0.74, 1.37, c - 0.02], [1.0, 1.39, c + 0.02], 'steelDark', { collide: false, occlude: false });

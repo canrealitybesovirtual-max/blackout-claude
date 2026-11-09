@@ -24,6 +24,8 @@ export function zone(id, name, min, max, o = {}) {
       for (let s = fl * 0.5; s < len - 0.1; s += fl) {
         const p0 = a.map((v, i) => v + d[i] * (s - 0.025)), p1 = a.map((v, i) => v + d[i] * (s + 0.025));
         z.cyls.push({ a: p0, b: p1, r: r * 1.32, mat, collide: false, occlude: false });
+        z.cyls.push({ a: p0, b: p1, r: r * 1.32 - 0.002, mat, collide: false, occlude: false, inward: true });   // its inside: no see-through ring
+        z.cyls.push({ a: p0, b: p1, r: r * 1.005, mat, collide: false, occlude: false, sides: 12 });             // the gasket face it closes on
       }
     }
   };
