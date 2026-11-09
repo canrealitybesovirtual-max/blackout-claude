@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><title>GLB view</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/examples/jsm/" } }</script>
+<style>html,body{margin:0;background:#556}</style></head><body>
+<script type="module">
+// dev tool: tools/glbview.html?f=../models/src/x.glb&az=0.6&el=0.2 (renders 4 views when ?four)
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6)); const dl = new THREE.DirectionalLight(0xffffff, 2); dl.position.set(2, 3, 2); sc.add(dl);
+const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.001, 1000);
+new GLTFLoader().load(q.get('f'), g => {
+  const o = g.scene; sc.add(o); o.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(o), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3()).length();
+  const az = +(q.get('az') || 0.6), el = +(q.get('el') || 0.2);
+  cam.position.set(c.x + Math.sin(az) * s * 1.1, c.y + Math.sin(el) * s, c.z + Math.cos(az) * s * 1.1); cam.lookAt(c);
+  if (q.has('skel')) sc.add(new THREE.SkeletonHelper(o));
+  r.render(sc, cam);
+  window.__info = { box: [b.min.toArray(), b.max.toArray()], meshes: [] };
+  o.traverse(m => { if (m.isMesh) window.__info.meshes.push({ name: m.name, skinned: !!m.isSkinnedMesh, tris: (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3, box: new THREE.Box3().setFromObject(m).min.toArray().map(v => +v.toFixed(3)).concat(new THREE.Box3().setFromObject(m).max.toArray().map(v => +v.toFixed(3))) }); });
+  window.__done = true;
+});
+</script></body></html>
