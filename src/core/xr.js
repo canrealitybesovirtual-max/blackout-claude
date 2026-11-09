@@ -3,6 +3,7 @@
 // by the game except to stop it going through a wall; no bob, no forced rotation.
 import * as THREE from 'three';
 import { makeModelMaterial } from '../render/shaders.js';
+import { F_COLLIDE } from '../world/grid.js';
 
 const TURN = 1.92;      // rad/s at full stick (smooth turning)
 const DEAD = 0.15;
@@ -14,14 +15,14 @@ export class XR {
     this.rig = new THREE.Group(); this.rig.name = 'xr-rig'; scene.add(this.rig);
     this.hands = { left: null, right: null }; this.prev = { left: [], right: [] };
     this.view = new THREE.PerspectiveCamera();   // world-space stand-in for the head (zones, audio, probes)
-    this._h = new THREE.Vector3(); this._m = new THREE.Matrix4(); this._lp = new THREE.Vector3(); this._hp = new THREE.Vector3(); this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._q2 = new THREE.Quaternion(); this._e = new THREE.Euler(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
+    this._h = new THREE.Vector3(); this._m = new THREE.Matrix4(); this._lp = new THREE.Vector3(); this._hp = new THREE.Vector3(); this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._q2 = new THREE.Quaternion(); this._e = new THREE.Euler(); this._rp = new THREE.Vector3(); this._rv = new THREE.Vector3(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3();
     renderer.xr.enabled = true;
     // hand models arrive later (setModels): left = arm holding the torch, right = the gun rigs
     this.models = { left: null, right: null }; this.torch = null; this.torchLen = 0.3;
     for (let i = 0; i < 2; i++) {
       const grip = renderer.xr.getControllerGrip(i), ray = renderer.xr.getController(i);
       this.rig.add(grip); this.rig.add(ray);
-      ray.addEventListener('connected', e => { const h = e.data.handedness; if (h !== 'left' && h !== 'right') return; this.hands[h] = { grip, ray, src: e.data }; if (this.models[h]) ray.add(this.models[h]); });
+      ray.addEventListener('connected', e => { const h = e.data.handedness; if (h !== 'left' && h !== 'right') return; this.hands[h] = { grip, ray, src: e.data }; if (this.models[h]) ray.add(this.models[h]); if (h === 'right' && this.rightHand) ray.add(this.rightHand); });
       ray.addEventListener('disconnected', e => { const h = e.data && e.data.handedness; if (this.hands[h] && this.hands[h].ray === ray) this.hands[h] = null; });
     }
     if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { this.supported = ok; if (this.onSupport) this.onSupport(ok); }).catch(() => {});
@@ -34,6 +35,8 @@ export class XR {
     }
     if (m.torch) { this.torch = m.torch; this.torchLen = m.len; this._buildHolster(); }
     if (m.guns) this.guns = m.guns;
+    if (m.fingers) this.fingers = m.fingers;
+    if (m.rightHand) { this.rightHand = m.rightHand; this.rFingers = m.rFingers; if (this.hands.right) this.hands.right.ray.add(m.rightHand); }
   }
   // flashlight pouch on the left thigh: a slim open sleeve, nothing above the torch's head
   _buildHolster() {
@@ -74,6 +77,8 @@ export class XR {
     const ref = r.xr.getReferenceSpace(); if (ref && ref.addEventListener) ref.addEventListener('reset', () => { this.needCenter = true; });
     session.addEventListener('end', () => {
       this.on = false; this.session = null;
+      if (this.gunHeld === false && this.hands.right && this.models.right) { this.hands.right.ray.add(this.models.right); this.models.right.quaternion.identity(); }
+      this.gunHeld = undefined; this._gripUsed = false; this.drop = null; this.rack = null;
       if (this.torch) { this._holsterTorch(false); this.holster.visible = false; }
       this._setSupport(false);
       this.scene.add(this.camera); this.input.device = 'kbm';
@@ -93,7 +98,7 @@ export class XR {
     this._poll(dt);
     // models ride the aim ray (guns point where the controller points), the hand sits on the grip
     for (const h of ['left', 'right']) {
-      const H = this.hands[h], M = this.models[h]; if (!H || !M) continue;
+      const H = this.hands[h], M = this.models[h]; if (!H || !M || (h === 'right' && this.gunHeld === false)) continue;
       H.ray.updateMatrixWorld(true); H.grip.updateMatrixWorld(true);
       this._m.copy(H.ray.matrixWorld).invert().multiply(H.grip.matrixWorld); M.position.setFromMatrixPosition(this._m);
     }
@@ -116,7 +121,7 @@ export class XR {
       rig.position.x += P.pos.x - h.x; rig.position.z += P.pos.z - h.z;
       rig.updateMatrixWorld(true);
     }
-    this._leftHand();
+    this._leftHand(); this._rightHand(dt);
     // the head's facing drives stick movement
     this.camera.getWorldQuaternion(this._q);
     const f = new THREE.Vector3(0, 0, -1).applyQuaternion(this._q);
@@ -129,8 +134,7 @@ export class XR {
   }
   _setSupport(on) {
     if (this.support === on) return;
-    this.support = on; if (this.guns) this.guns.setSupport(on);
-    if (this.models.left) this.models.left.visible = !on;          // the gun rig's own left arm takes over
+    this.support = on;                                              // your own left hand stays: it closes on the handguard
     if (!on && this.models.right) this.models.right.quaternion.identity();
     if (on) this._pulse('left', 0.35, 30);
   }
@@ -166,8 +170,30 @@ export class XR {
         if (lp.distanceTo(this._hp) < 0.17) { this._setSupport(true); this._supGun = gun; }
       }
     }
-    if (!down || !gun || gun !== this._supGun || !this.inHolster) this._setSupport(false);
+    // rack: left grip on the charging handle / slide and pull it back along the bore
+    if (down && !this._lgPrev && gun && this.gunHeld && this.inHolster && gun.rif) {
+      gun.rif.getWorldPosition(this._hp);
+      if (lp.distanceTo(this._hp) < 0.11) { this.rack = { start: lp.dot(gun.boreWorld()), back: false }; this._setSupport(false); this._pulse('left', 0.3, 20); }
+    }
+    if (this.rack) {
+      const pull = gun ? Math.max(0, Math.min(gun.rackTravel, this.rack.start - lp.dot(gun.boreWorld()))) : 0;
+      this.guns.rackPull = pull;
+      if (!this.rack.back && gun && pull > gun.rackTravel * 0.85) { this.rack.back = true; this._pulse('left', 0.6, 30); this.guns.rackBack(); }
+      if (!down || !gun || !this.gunHeld) { if (this.rack.back) { this.guns.rackHome(); this._pulse('right', 0.7, 40); } this.rack = null; this.guns.rackPull = 0; }
+    }
+    if (!down || !gun || gun !== this._supGun || !this.inHolster || !this.gunHeld || this.rack) this._setSupport(false);
     this._lgPrev = down;
+    // fingers: the torch grip while you hold it, else trigger -> index, grip -> the rest, a touched button -> thumb
+    if (this.fingers) {
+      if (!this.inHolster) this.fingers.hold();
+      else {
+        const b = gp ? gp.buttons : [], v = i => (b[i] ? b[i].value || (b[i].pressed ? 1 : 0) : 0), tch = [3, 4, 5].some(i => b[i] && (b[i].touched || b[i].pressed));
+        const f = this._fk || (this._fk = { index: 0, grip: 0, thumb: 0 });
+        const tg = { index: Math.max(v(0), this.support ? 0.75 : 0), grip: Math.max(v(1), this.rack ? 1 : 0), thumb: tch || this.support || this.rack ? 0.8 : 0.1 };
+        for (const k in f) f[k] += (tg[k] - f[k]) * 0.45;
+        this.fingers.pose(f);
+      }
+    }
     // two hands: the gun turns so the line from its grip hand to its support hand runs to the real left hand
     if (this.support && R) {
       const M = this.models.right, g = R.ray;
@@ -181,6 +207,67 @@ export class XR {
         if (lp.distanceTo(gpos) > gun.supportRest.length() + 0.25) this._setSupport(false);   // let go: hands too far apart
       }
     }
+  }
+  // right hand: the gun stays in the hand while the grip is squeezed (after the first squeeze); let go and it falls,
+  // thrown with the hand's speed; squeeze near it to pick it up
+  _rightHand(dt) {
+    const R = this.hands.right, M = this.models.right; if (!R || !M) return;
+    const gp = R.src.gamepad, down = !!(gp && gp.buttons[1] && gp.buttons[1].pressed);
+    R.grip.updateMatrixWorld(true); const hp = this._rp.setFromMatrixPosition(R.grip.matrixWorld);
+    const hv = this._rv; if (this._rpPrev) hv.subVectors(hp, this._rpPrev).multiplyScalar(1 / Math.max(dt, 1e-3)); (this._rpPrev || (this._rpPrev = new THREE.Vector3())).copy(hp);
+    if (this.gunHeld === undefined) this.gunHeld = true;
+    if (down) this._gripUsed = true;
+    if (this.gunHeld && this._gripUsed && !down && !this.support && this.guns && this.guns.vrGun()) {
+      M.updateWorldMatrix(true, false); M.matrixWorld.decompose(M.position, M.quaternion, this._s);
+      this.scene.add(M); this.gunHeld = false; this._setSupport(false);
+      this.drop = { v: hv.clone().multiplyScalar(1.1), w: new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4), rest: false, t: 0 };
+    }
+    if (!this.gunHeld && down && !this._rgPrev) {
+      M.getWorldPosition(this._hp);
+      if (hp.distanceTo(this._hp) < 0.3) { R.ray.add(M); M.quaternion.identity(); this.gunHeld = true; this.drop = null; this._pulse('right', 0.4, 30); }
+    }
+    this._rgPrev = down;
+    if (this.drop) this._fall(dt);
+    // the empty hand: shown while the gun is out of it, on the grip, fingers from the controller
+    const E = this.rightHand;
+    if (E) {
+      E.visible = !this.gunHeld;
+      if (E.visible) {
+        R.ray.updateMatrixWorld(true); this._m.copy(R.ray.matrixWorld).invert().multiply(R.grip.matrixWorld); E.position.setFromMatrixPosition(this._m);
+        if (this.rFingers) {
+          const b = gp ? gp.buttons : [], v = i => (b[i] ? b[i].value || (b[i].pressed ? 1 : 0) : 0), tch = [3, 4, 5].some(i => b[i] && (b[i].touched || b[i].pressed));
+          const f = this._rk || (this._rk = { index: 0, grip: 0, thumb: 0 });
+          const tg = { index: v(0), grip: v(1), thumb: tch ? 0.8 : 0.1 };
+          for (const k in f) f[k] += (tg[k] - f[k]) * 0.45;
+          this.rFingers.pose(f);
+        }
+      }
+    }
+    if (this.guns) this.guns.vrArms(this.gunHeld !== false);
+  }
+  _fall(dt) {
+    const D = this.drop, M = this.models.right, g = this.player.zm.grid; if (D.rest || !g) return;
+    D.t += dt; D.v.y -= 9.81 * dt;
+    const p = M.position, step = D.v.length() * dt;
+    if (step > 1e-4) {                                       // walls: bounce off along the travel
+      const d = this._b.copy(D.v).normalize(), t = g.ray(p.x, p.y, p.z, d.x, d.y, d.z, step + 0.06, F_COLLIDE, false);
+      if (t >= 0 && d.y > -0.7) { D.v.x *= -0.3; D.v.z *= -0.3; }
+    }
+    p.addScaledVector(D.v, dt);
+    const t = g.ray(p.x, p.y + 0.3, p.z, 0, -1, 0, 2.5, F_COLLIDE, false), fy = t >= 0 ? p.y + 0.3 - t : -1e9;
+    if (p.y < fy + 0.04) {
+      p.y = fy + 0.04;
+      if (D.v.y < -1.2 && this.guns) this.guns.dropSound(p);
+      D.v.y = -D.v.y * 0.22; D.v.x *= 0.55; D.v.z *= 0.55; D.w.multiplyScalar(0.5);
+      // settles on its side
+      const yaw = Math.atan2(-this._b.set(0, 0, -1).applyQuaternion(M.quaternion).x, -this._b.z);
+      M.quaternion.slerp(this._q2.setFromEuler(this._e.set(0, yaw, Math.PI / 2, 'YXZ')), 0.35);
+      if (Math.abs(D.v.y) < 0.15 && Math.hypot(D.v.x, D.v.z) < 0.08) D.rest = true;
+    } else {
+      const w = D.w, a = w.length() * dt;
+      if (a > 0) M.quaternion.premultiply(this._q2.setFromAxisAngle(this._b.copy(w).normalize(), a));
+    }
+    if (D.t > 12) D.rest = true;
   }
   _poll() {
     const I = this.input;
@@ -202,7 +289,7 @@ export class XR {
         I.held.fire = down(0);                        // trigger: fire (or use, pointing at a panel)
         if (edge(0)) I.pressed.add('use');
         if (edge(4)) I.pressed.add('reload');         // A
-        if (edge(5)) I.pressed.add('swap');           // B: next gun / torch
+        if (edge(5) && this.gunHeld !== false) I.pressed.add('swap');   // B: next gun / torch (not while the gun is on the floor)
         if (edge(3)) I.pressed.add('jump');           // stick click
       }
       this.prev[side] = bt.map((b, i) => down(i));

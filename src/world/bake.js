@@ -28,6 +28,7 @@ export function bakeSector(built, grid, lights, doors, doorPrims, opts = {}) {
   const progress = opts.onProgress || (() => {});
   const P = grid.p;
   const zoneStates = built.map(bz => doors.some(d => d.zones.includes(bz.id)) ? 2 : 1);
+  const zoneDoor = built.map(bz => Math.max(0, doors.findIndex(d => d.zones.includes(bz.id))));   // each zone blends with its own door
   const doorCenters = doors.map(d => [(d.min[0] + d.max[0]) / 2, (d.min[1] + d.max[1]) / 2, (d.min[2] + d.max[2]) / 2]);
 
   // ---- texel setup ----
@@ -69,16 +70,16 @@ export function bakeSector(built, grid, lights, doors, doorPrims, opts = {}) {
 
   // ---- direct light ----
   function direct(state) {
-    grid.skip = state === 1 && doors.length ? doorPrims[doors[0].id] : -1;
     for (let zi = 0; zi < Z.length; zi++) {
       const T = Z[zi];
       if (state >= zoneStates[zi]) { T.E[state] = T.E[0]; T.dirs[state] = T.dirs[0]; continue; }
+      grid.skip = state === 1 && doors.length ? doorPrims[doors[zoneDoor[zi]].id] : -1;
       const E = new Float32Array(T.n * 3), D = new Float32Array(T.n * 4);
       for (let idx = 0; idx < T.n; idx++) {
         if (!T.valid[idx]) continue;
         const k = idx * 3, px = T.p[k], py = T.p[k + 1], pz = T.p[k + 2], nx = T.nr[k], ny = T.nr[k + 1], nz = T.nr[k + 2];
         if (state === 1) { // outside the door's reach the open state equals the closed one
-          const c = doorCenters[0];
+          const c = doorCenters[zoneDoor[zi]];
           if ((px - c[0]) ** 2 + (py - c[1]) ** 2 + (pz - c[2]) ** 2 > 144) {
             E[k] = T.E[0][k]; E[k + 1] = T.E[0][k + 1]; E[k + 2] = T.E[0][k + 2];
             D.set(T.dirs[0].subarray(idx * 4, idx * 4 + 4), idx * 4); continue;
@@ -145,17 +146,17 @@ export function bakeSector(built, grid, lights, doors, doorPrims, opts = {}) {
 
   // ---- one diffuse bounce ----
   function indirect(state) {
-    grid.skip = state === 1 && doors.length ? doorPrims[doors[0].id] : -1;
     const H = grid.hit;
     for (let zi = 0; zi < Z.length; zi++) {
       const T = Z[zi];
       if (state >= zoneStates[zi]) { T.ind[state] = T.ind[0]; continue; }
+      grid.skip = state === 1 && doors.length ? doorPrims[doors[zoneDoor[zi]].id] : -1;
       const I = new Float32Array(T.n * 3), D = T.dirs[state];
       for (let idx = 0; idx < T.n; idx++) {
         if (!T.valid[idx]) continue;
         const k = idx * 3, px = T.p[k], py = T.p[k + 1], pz = T.p[k + 2], nx = T.nr[k], ny = T.nr[k + 1], nz = T.nr[k + 2];
         if (state === 1) {
-          const c = doorCenters[0];
+          const c = doorCenters[zoneDoor[zi]];
           if ((px - c[0]) ** 2 + (py - c[1]) ** 2 + (pz - c[2]) ** 2 > 196) { I[k] = T.ind[0][k]; I[k + 1] = T.ind[0][k + 1]; I[k + 2] = T.ind[0][k + 2]; D.set(T.dirs[0].subarray(idx * 4, idx * 4 + 4), idx * 4); continue; }
         }
         // tangent frame (Duff et al. 2017)

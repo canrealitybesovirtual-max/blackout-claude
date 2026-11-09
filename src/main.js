@@ -62,14 +62,14 @@ async function boot() {
   try { input.sens = +(localStorage.getItem('bs.sens') || 1); } catch (e) { /* storage blocked */ }
   $('sens').value = input.sens;
 
-  let targets = null, door = null;
+  let targets = null, door = null; const doors = [];
   const zm = new ZoneManager(sector, {
     scene, arrays, decalAtlas: atlas.texture, perf, audio, glows: Q.glows, onStatus: status,
     onZone: z => { toast(z.name); audio.setZone(z.reverb, z.ambience); U.uFogColor.value.setRGB(...z.fog); fogTarget = z.fogDensity; },
     onLoad: rz => { if (targets && rz.z.targets.length) targets.setZone(rz.id, rz.z.targets); },
     onUnload: id => { if (targets) targets.removeZone(id); },
   });
-  zm.onGrid = () => { if (door) door.sync(); };
+  zm.onGrid = () => { for (const d of doors) d.sync(); };
   status('Loading Sector B…');
   t = performance.now();
   await zm.init(p => status(`Loading Sector B… ${Math.round(p * 100)}%`));
@@ -81,12 +81,13 @@ async function boot() {
   const effects = new Effects(scene, Q, arrays, atlas.texture, zm, audio);
   targets = new Targets(scene, arrays, audio, effects);
   for (const rz of zm.loaded.values()) if (rz.z.targets.length) targets.setZone(rz.id, rz.z.targets);
-  door = new SlidingDoor(sector.doors[0], scene, arrays, zm, audio);
+  for (const d of sector.doors) doors.push(new SlidingDoor(d, scene, arrays, zm, audio));
+  door = doors[0];
   const panel = new ElectricPanel(scene, audio);
   const launch = new LaunchDoor(scene, audio);
   const fixtures = new Fixtures(scene, sector, zm, audio);
   const extinguisher = new Extinguisher(scene, [-1.505, 0.62, 11.4], -Math.PI / 2);   // label side facing the corridor (+x)
-  door.sync();
+  for (const d of doors) d.sync();
   let fogTarget = z0.fogDensity; U.uFogDensity.value = fogTarget; U.uFogColor.value.setRGB(...z0.fog);
 
   let muzzleT = 0; const muzzlePos = new THREE.Vector3();
@@ -96,7 +97,7 @@ async function boot() {
     zm, player, effects, audio, targets,
     flashLight: p => { muzzlePos.copy(p); muzzleT = 0.06; },
     onShot: (o, d, w) => shoot(o, d, w),
-    blockFire: () => !!(xr && xr.on && interactPrompt()),   // VR trigger on a door panel uses it
+    blockFire: () => !!(xr && xr.on && (interactPrompt() || !xr.gunHeld)),   // VR trigger on a door panel uses it
   });
 
   // ---- hitscan ----
@@ -117,8 +118,8 @@ async function boot() {
   }
 
   // ---- interaction ----
-  const doorUse = { label: () => door.target > 0.5 ? 'CLOSE DOOR' : 'OPEN DOOR', act: () => door.toggle() };
-  const useTargets = [...sector.doors[0].panels.map(p => ({ pos: p.pos, r: 0.6, ...doorUse })), { pos: door.center, r: 1.1, ...doorUse },
+  const useTargets = [...doors.flatMap(D => { const u = { label: () => D.target > 0.5 ? 'CLOSE DOOR' : 'OPEN DOOR', act: () => D.toggle() };
+      return [...D.def.panels.map(p => ({ pos: p.pos, r: 0.6, ...u })), { pos: D.center, r: 1.1, ...u }]; }),
     { pos: panel.center, r: 0.42, near: 1.6, label: () => panel.target > 0.5 ? 'CLOSE PANEL' : 'OPEN PANEL', act: () => panel.toggle() },
     { pos: launch.pad, r: 0.2, near: 1.8, label: () => 'USE READER', act: () => { const m = launch.request(); if (m) toast(m); } },
     { pos: launch.center, r: 1.0, near: 2.4, label: () => 'OPEN DOOR', act: () => { const m = launch.request(); if (m) toast(m); } }];
@@ -284,7 +285,7 @@ async function boot() {
       U.uGrain.value = 0; U.uVignette.value = 0;
       if (!xr.modelsLoaded) {   // hand models for the controllers (built once)
         xr.modelsLoaded = true;
-        Promise.all([(weapons.hands || weapons).makeVR(), weapons.hands ? weapons.makeVR() : null]).then(([h, g]) => { xr.setModels({ left: h && h.left, torch: h && h.torch, len: h && h.len, right: g, guns: weapons.vrGun ? weapons : null }); }).catch(e => console.error('vr models', e));
+        Promise.all([(weapons.hands || weapons).makeVR(), weapons.hands ? weapons.makeVR() : null]).then(([h, g]) => { xr.setModels({ left: h && h.left, torch: h && h.torch, len: h && h.len, fingers: h && h.fingers, rightHand: h && h.rightHand, rFingers: h && h.rFingers, right: g, guns: weapons.vrGun ? weapons : null }); }).catch(e => console.error('vr models', e));
       }
       await xr.enter(); weapons.vrOn = true;
     }
@@ -319,7 +320,7 @@ async function boot() {
     let t1 = performance.now();
     zm.update(V);
     perf.time('zones', performance.now() - t1);
-    door.update(dt, player.pos); panel.update(dt); if (zm.current === 'corridor') { panel.probe(sampleProbe); extinguisher.probe(sampleProbe); } launch.update(dt); if (zm.current === 'silo') launch.probe(sampleProbe);
+    for (const d of doors) d.update(dt, player.pos); panel.update(dt); if (zm.current === 'corridor') { panel.probe(sampleProbe); extinguisher.probe(sampleProbe); } launch.update(dt); if (zm.current === 'silo') launch.probe(sampleProbe);
     targets.update(dt);
     if (running) weapons.update(dt, input, V, player); else weapons.update(0, { held: {}, has: () => false }, V, player);
     t1 = performance.now();

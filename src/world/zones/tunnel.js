@@ -12,7 +12,8 @@ export default function tunnel() {
     t: { '-z': 0.15, '+z': 0.15 },
     open: [{ side: '-z', a: -0.6, b: 0.6, h: 2.2 }, { side: '+z', a: -0.8, b: 0.52, h: 2.4, trim: 'hazard' }],
   });
-  z.portals.push({ to: 'silo', min: [-0.8, 0, 50.0], max: [0.52, 2.4, 50.3] });
+  z.portals.push({ to: 'silo', min: [-0.8, 0, 50.0], max: [0.52, 2.4, 50.3], door: 'siloDoor' });
+  z.box([-0.99, 1.12, 49.99], [-0.81, 1.46, 50.0], 'steelDark');   // silo door control (tunnel side)
   z.portals.push({ to: 'corridor', min: [-0.6, 0, 28], max: [0.6, 2.2, 28.3] });
 
   // main water main on saddles, two service lines above

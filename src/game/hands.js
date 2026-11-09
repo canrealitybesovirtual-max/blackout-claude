@@ -18,7 +18,7 @@ function analyse(scene) {
   // support arm reaches furthest forward (+z in the source file)
   arms.sort((a, b) => box(b).max.z - box(a).max.z);
   const support = arms[0], firing = arms[1];
-  const hand = tagArmParts(support); if (firing) tagArmParts(firing);
+  const hand = tagArmParts(support), fhand = firing ? tagArmParts(firing) : null;
   const palm = new THREE.Vector3().setFromMatrixPosition(hand.matrixWorld);
   // rifle cross-section at the palm: centre and radius of the handguard
   let n = 0; const c = new THREE.Vector3(), v = new THREE.Vector3(), pts = [];
@@ -31,7 +31,7 @@ function analyse(scene) {
   }
   if (n) c.multiplyScalar(1 / n); else c.set(0, palm.y + 0.03, palm.z);
   let r = 0; for (const p of pts) r += Math.hypot(p.x - c.x, p.y - c.y); r = n ? r / n : 0.025;
-  return { support, firing, props, palm, axis: c, radius: r, hand };
+  return { support, firing, props, palm, axis: c, radius: r, hand, fhand };
 }
 
 function placeTorch(torch, info) {
@@ -80,6 +80,48 @@ function wrapFingers(info, holder, radius) {
   }
 }
 
+// a controllable hand: per finger chain its rest pose and a flexion axis (in the bone's own frame, bending toward
+// the torch / handguard axis the palm faces). pose(curl per finger) = rest turned by curl x joint weight.
+function fingerRig(info, holder) {
+  holder.updateWorldMatrix(true, false);
+  const A = new THREE.Vector3().setFromMatrixPosition(holder.matrixWorld), T = new THREE.Vector3(0, 0, 1).transformDirection(holder.matrixWorld);
+  const fore = info.hand.parent && info.hand.parent.isBone ? info.hand.parent : info.hand;
+  const chains = [];
+  for (const root of [...info.hand.children, ...fore.children]) {
+    if (!root.isBone || root === info.hand) continue;
+    const c = []; let b = root; while (b && b.isBone) { c.push(b); b = b.children.find(k => k.isBone); }
+    if (c.length >= 2) chains.push({ bones: c, palm: root.parent === info.hand });
+  }
+  const P = b => b.getWorldPosition(new THREE.Vector3()), q = new THREE.Quaternion();
+  for (const ch of chains) {
+    ch.rest = ch.bones.map(b => b.quaternion.clone());
+    ch.axis = ch.bones.slice(0, -1).map((b, j) => {
+      const jp = P(b), d = P(ch.bones[j + 1]).sub(jp).normalize(), n = A.clone().sub(jp); n.addScaledVector(T, -n.dot(T)).normalize();
+      const ax = new THREE.Vector3().crossVectors(d, n); if (ax.lengthSq() < 1e-8) ax.set(1, 0, 0);
+      return ax.normalize().applyQuaternion(b.getWorldQuaternion(q).invert());
+    });
+    ch.root = P(ch.bones[0]);
+  }
+  // roles: the forearm chain whose root sits furthest from the palm fingers is the thumb; the palm finger nearest it is the index
+  const palmC = chains.filter(c => c.palm), mean = palmC.reduce((s, c) => s.add(c.root), new THREE.Vector3()).multiplyScalar(1 / Math.max(1, palmC.length));
+  let thumb = null; for (const c of chains) if (!c.palm && (!thumb || c.root.distanceTo(mean) > thumb.root.distanceTo(mean))) thumb = c;
+  let index = null; if (thumb) for (const c of palmC) if (!index || c.root.distanceTo(thumb.root) < index.root.distanceTo(thumb.root)) index = c;
+  for (const c of chains) c.role = c === thumb ? 'thumb' : c === index ? 'index' : 'grip';
+  const W = { thumb: [0.55, 0.65, 0.5], index: [0.9, 1.15, 0.85, 0.5], grip: [0.95, 1.2, 0.9, 0.55] }, qq = new THREE.Quaternion();
+  return {
+    chains,
+    // k = curl 0 open .. 1 fist per role; open is a little straighter than the pack's pose
+    pose(k) {
+      for (const c of chains) {
+        const t = THREE.MathUtils.lerp(-0.35, 1, k[c.role]), w = W[c.role];
+        c.bones.forEach((b, j) => { if (j < c.axis.length) b.quaternion.copy(c.rest[j]).multiply(qq.setFromAxisAngle(c.axis[j], t * (w[j] ?? 0.5))); });
+      }
+    },
+    save() { for (const c of chains) c.hold = c.bones.map(b => b.quaternion.clone()); },
+    hold() { for (const c of chains) c.bones.forEach((b, j) => b.quaternion.copy(c.hold[j])); },
+  };
+}
+
 async function build(fresh) {
   const [h, f] = await Promise.all([loadGLB(HANDS_URL, fresh), loadGLB(TORCH_URL, fresh)]);
   const arms = h.scene, info = analyse(arms);
@@ -93,8 +135,10 @@ async function build(fresh) {
   placeTorch(holder, info);
   arms.add(holder);
   arms.updateMatrixWorld(true);
+  const fingers = fingerRig(info, holder);
   wrapFingers(info, holder, 0.0285 * holder.scale.x + 0.012);   // body radius + glove
-  return { arms, torch: holder, info, len: tb.max.z - tb.min.z };
+  fingers.save();                                               // the torch grip
+  return { arms, torch: holder, info, len: tb.max.z - tb.min.z, fingers };
 }
 
 export class Hands {
@@ -159,6 +203,26 @@ export class Hands {
     const g = new THREE.Group(), inner = new THREE.Group();
     inner.rotation.y = Math.PI; g.add(inner); inner.add(a.arms);   // the file looks down +z, the grip down -z
     a.arms.position.copy(a.torch.position).negate();
-    return { left: g, torch: a.torch, len: a.len };
+    // right controller, shown while the gun is out of the hand: the pack's firing arm, palm on the grip
+    const b = await build(true);
+    for (const m of [b.info.support, b.info.firing]) if (m) m.material.uniforms.uCutUpper.value = 1;
+    b.info.support.visible = false; b.torch.visible = false;
+    const rh = b.info.fhand;
+    let rFingers = null;
+    const r = new THREE.Group(), rin = new THREE.Group(); rin.rotation.y = Math.PI; r.add(rin); rin.add(b.arms);
+    if (rh) {
+      b.arms.updateMatrixWorld(true);
+      const palm = new THREE.Vector3().setFromMatrixPosition(rh.matrixWorld);
+      b.arms.position.copy(palm).negate();
+      // the rifle grip it closes on: rifle vertices round the palm (the axis runs roughly up through the fist)
+      const grip = new THREE.Object3D(); let n = 0; const c = new THREE.Vector3(), v = new THREE.Vector3();
+      for (const m of b.info.props) { const P = m.geometry.attributes.position; for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i).applyMatrix4(m.matrixWorld); if (v.distanceTo(palm) < 0.06) { c.add(v); n++; } } }
+      grip.position.copy(n ? c.multiplyScalar(1 / n) : palm.clone().add(new THREE.Vector3(0, 0.02, 0.03)));
+      grip.lookAt(grip.position.clone().add(new THREE.Vector3(0, 1, 0)));
+      b.arms.add(grip); b.arms.updateMatrixWorld(true);
+      rFingers = fingerRig({ hand: rh }, grip); rFingers.save();
+    }
+    r.visible = false;
+    return { left: g, torch: a.torch, len: a.len, fingers: a.fingers, rightHand: r, rFingers };
   }
 }

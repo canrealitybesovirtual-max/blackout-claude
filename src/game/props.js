@@ -30,19 +30,23 @@ export class SlidingDoor {
     this.open = 0; this.target = 0; this.vel = 0; this.moving = false; this.loop = null;
     const [x0, y0, z0] = def.min, [x1, y1, z1] = def.max, w = x1 - x0, h = y1 - y0, d = z1 - z0;
     const OLIVE = [0.34, 0.38, 0.29], DARK = [0.2, 0.21, 0.22];
-    const parts = [tagBox(w, h, d, 0, 0, 0, 3, OLIVE)];
-    for (const y of [-0.7, 0, 0.7]) parts.push(tagBox(w + 0.03, 0.08, d - 0.1, 0, y, 0, 3, OLIVE));
-    parts.push(tagBox(w + 0.01, h, 0.12, 0, 0, d / 2 - 0.06, 5, [1, 1, 1]));            // hazard leading edge
-    parts.push(tagBox(w + 0.04, 0.3, 0.035, 0, -0.1, d / 2 - 0.25, 3, DARK));            // pull handle bar
-    parts.push(tagBox(w + 0.005, 0.3, 0.42, 0, 0.55, 0.05, 6, [1, 1, 1]));               // vision panel (dark wired glass)
+    // built thin along x, long along z; a door that spans x is the same slab turned a quarter (leading edge toward +x)
+    const alongX = w > d, T = alongX ? d : w, Lg = alongX ? w : d;
+    const parts = [tagBox(T, h, Lg, 0, 0, 0, 3, OLIVE)];
+    for (const y of [-0.7, 0, 0.7]) parts.push(tagBox(T + 0.03, 0.08, Lg - 0.1, 0, y, 0, 3, OLIVE));
+    parts.push(tagBox(T + 0.01, h, 0.12, 0, 0, Lg / 2 - 0.06, 5, [1, 1, 1]));            // hazard leading edge
+    parts.push(tagBox(T + 0.04, 0.3, 0.035, 0, -0.1, Lg / 2 - 0.25, 3, DARK));            // pull handle bar
+    parts.push(tagBox(T + 0.005, 0.3, 0.42, 0, 0.55, 0.05, 6, [1, 1, 1]));               // vision panel (dark wired glass)
     this.mesh = new THREE.Mesh(mergeGeo(parts), makeDynamicMaterial(arrays));
+    if (alongX) this.mesh.rotation.y = Math.PI / 2;
+    this.alongX = alongX;
     this.base = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     this.mesh.position.copy(this.base);
     scene.add(this.mesh);
     // status LEDs on both panels (two tiny unlit quads, one draw each)
     this.leds = def.panels.map(p => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.03), new THREE.MeshBasicMaterial({ color: 0xff2010 }));
-      m.position.set(p.pos[0] + p.n[0] * 0.011, p.pos[1] + 0.1, p.pos[2]); m.lookAt(m.position.x + p.n[0], m.position.y, m.position.z + p.n[2]);
+      m.position.set(p.pos[0] + p.n[0] * 0.011, p.pos[1] + 0.1, p.pos[2] + p.n[2] * 0.011); m.lookAt(m.position.x + p.n[0], m.position.y, m.position.z + p.n[2]);
       scene.add(m); return m;
     });
     this.center = [this.base.x, 1.2, this.base.z];
@@ -55,7 +59,8 @@ export class SlidingDoor {
   }
   blockedBy(p) { // safety sensor: never close on the player
     const d = this.def;
-    return p.x > d.min[0] - 0.45 && p.x < d.max[0] + 0.45 && p.z > d.min[2] - 0.1 && p.z < d.max[2] + 0.1;
+    const ax = this.alongX ? 0.1 : 0.45, az = this.alongX ? 0.45 : 0.1;
+    return p.x > d.min[0] - ax && p.x < d.max[0] + ax && p.z > d.min[2] - az && p.z < d.max[2] + az;
   }
   update(dt, playerPos) {
     if (this.target === 0 && this.open > 0 && this.blockedBy(playerPos)) { this.target = 1; this.audio.play3D('deny', this.def.panels[0].pos, { gain: 0.6, maxDist: 12 }); }

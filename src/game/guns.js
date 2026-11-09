@@ -101,7 +101,7 @@ async function loadRig(def, fresh) {
   } else if (gun[0]) host = gun[0];
   const muzzle = new THREE.Object3D(); host.add(muzzle); host.updateWorldMatrix(true, false);
   muzzle.position.copy(host.worldToLocal(tip.clone()));
-  const handR = findBone(root, /^Hand_R(?!.*end)/), handL = findBone(root, /^Hand_L(?!.*end)/);
+  const handR = findBone(root, /^Hand_R(?!.*end)/), handL = findBone(root, /^Hand_L(?!.*end)/), rif = findBone(root, /^Rif(?!.*end)/);
   // the gun's own up: from the bore at the muzzle to the front sight post (the pack holds its guns canted a little;
   // shown upright, as a shooter holds one)
   const up = front.p.clone().sub(tip); up.addScaledVector(d, -up.dot(d));
@@ -119,7 +119,7 @@ async function loadRig(def, fresh) {
     hipQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(Rv, Uv, F.clone().negate())).invert();
   }
   const scale = def.len / L;                 // the packs are not at real size (the Saiga is ~2x)
-  return { root, mixer, A, eye, bore: d, muzzle, handR, handL, toCam, hipQ, mats, meshes, scale, rearSight: rear.p.clone() };
+  return { root, mixer, A, eye, bore: d, muzzle, handR, handL, rif, toCam, hipQ, mats, meshes, scale, rearSight: rear.p.clone() };
 }
 
 export class GunSystem {
@@ -133,7 +133,7 @@ export class GunSystem {
     this.flashMat = makeFlashMaterial();
     this.kick = 0; this.kickV = 0; this.rise = 0; this.riseV = 0; this.sway = new THREE.Vector2(); this.swayV = new THREE.Vector2();
     this.lastYaw = null; this.lastPitch = 0; this.t = 0; this.overlay = 0; this.walkW = 0;
-    this._v = new THREE.Vector3(); this._d = new THREE.Vector3(); this._q = new THREE.Quaternion(); this._q2 = new THREE.Quaternion(); this._e = new THREE.Euler();
+    this._v = new THREE.Vector3(); this._d = new THREE.Vector3(); this._m = new THREE.Matrix4(); this.rackPull = 0; this._q = new THREE.Quaternion(); this._q2 = new THREE.Quaternion(); this._e = new THREE.Euler();
     Promise.all(Object.keys(GUNS).map(async id => { this.rigs[id] = this._mount(await loadRig(GUNS[id], false), id); }))
       .then(() => { this.ready = true; this._show(); }).catch(e => console.error('guns', e));
   }
@@ -244,6 +244,12 @@ export class GunSystem {
         r.A.walk && r.A.walk.setEffectiveWeight((1 - this.overlay) * this.walkW);
         r.A.walk && (r.A.walk.timeScale = 0.7 + P.speed2d / 4);
         r.mixer.update(dt);
+        if (r.rif && !r.rifAnim && r.rifRest) r.rif.position.copy(r.rifRest);   // not keyed by the clips: start from rest each frame
+        if (r === this.vr[this.cur] && r.rif && this.rackPull > 0) {     // VR rack: the handle / slide back by the hand's pull
+          const par = r.rif.parent; par.updateWorldMatrix(true, false);
+          const sc = this._v.setFromMatrixScale(par.matrixWorld).x, dir = this._d.copy(r.boreWorld()).transformDirection(this._m.copy(par.matrixWorld).invert());
+          r.rif.position.addScaledVector(dir, -this.rackPull / sc);
+        }
       }
       // procedural layer: look lag, recoil kick, sprint lower, aim (bore onto the eye line), switching
       if (this.lastYaw === null) { this.lastYaw = P.yaw; this.lastPitch = P.pitch; }
@@ -309,6 +315,19 @@ export class GunSystem {
     outPos.addScaledVector(outDir, -0.18);
   }
 
+  // VR rack: handle at the back (a chambered round flies out), then home (feeds the next one)
+  rackBack() {
+    const w = GUNS[this.cur], st = this.st; if (!w) return;
+    this.ctx.audio.play2D('magout' + w.sfx, { gain: 0.5, rate: 1.4 });
+    if (st.chamber) { st.chamber = false; const r = this.vr[this.cur]; if (r) { const p = r.rif.getWorldPosition(new THREE.Vector3()); this.ctx.effects.eject([p.x, p.y, p.z], [1.2, 1.4, 0.2], this.cur === 'pistol'); } }
+  }
+  rackHome() {
+    const w = GUNS[this.cur], st = this.st; if (!w) return;
+    this.ctx.audio.play2D('bolt' + w.sfx, { gain: 0.9 });
+    if (!st.chamber && st.mag > 0) { st.mag--; st.chamber = true; }
+  }
+  vrArms(on) { if (this._armsOn === on) return; this._armsOn = on; for (const id in this.vr) for (const m of this.vr[id].meshes) if (m.userData.arm) m.visible = on; }   // a dropped gun falls without the hand
+  dropSound(p) { this.ctx.audio.play3D('magdrop', [p.x, p.y, p.z], { gain: 0.9, maxDist: 16, rate: 0.7 + Math.random() * 0.1 }); }
   // VR: second rigs on the right controller, gun along the controller, its right hand on the grip.
   // Upper arms are not drawn; the left arm shows only while the real left hand grips the handguard.
   vrGun() { return this.cur !== 'torch' && this.vr[this.cur] || null; }
@@ -331,6 +350,8 @@ export class GunSystem {
       // real left hand grabs, and the line the two hands aim along
       holder.updateMatrixWorld(true);
       rig.supportRest = rig.handL ? new THREE.Vector3().setFromMatrixPosition(rig.handL.matrixWorld) : new THREE.Vector3(0, 0, -0.3);
+      rig.rackTravel = id === 'saiga' ? 0.085 : 0.042;                   // charging handle / slide travel (m)
+      if (rig.rif) { rig.rifRest = rig.rif.position.clone(); rig.rifAnim = Object.values(rig.A).some(a => a.getClip().tracks.some(t => t.name === rig.rif.name + '.position')); }
       this.vr[id] = rig;
     }
     return group;

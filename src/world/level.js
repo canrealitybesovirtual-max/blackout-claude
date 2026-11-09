@@ -17,6 +17,11 @@ export function sectorB() {
       id: 'armoryDoor', zones: ['corridor', 'armory'],
       min: [1.69, 0, 13.15], max: [1.81, 2.32, 14.85], slide: [0, 0, -1.72], time: 1.6,
       panels: [{ pos: [1.5, 1.29, 12.74], n: [-1, 0, 0] }, { pos: [2.0, 1.29, 12.74], n: [1, 0, 0] }],
+    }, {
+      // silo hall: a blast door across the passage, sliding left behind the tunnel's end wall
+      id: 'siloDoor', zones: ['tunnel', 'silo'],
+      min: [-0.8, 0, 50.17], max: [0.52, 2.38, 50.29], slide: [-1.36, 0, 0], time: 1.8,
+      panels: [{ pos: [-0.9, 1.29, 49.989], n: [0, 0, -1] }, { pos: [0.79, 1.29, 50.75], n: [-1, 0, 0] }],
     }],
     start: 'corridor',
   };
