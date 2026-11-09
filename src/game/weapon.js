@@ -10,12 +10,12 @@ import { MAT_KEYS } from '../world/build.js';
 
 export const WEAPONS = {
   rifle: {
-    name: 'CARBINE 5.56', build: buildRifle, sound: 'rifle', modes: ['auto', 'semi'], rpm: 800, cap: 30, reserve: 150,
+    name: 'CARBINE 5.56', build: buildRifle, sound: 'rifle', sfx: '_r', modes: ['auto', 'semi'], rpm: 800, cap: 30, reserve: 150,
     damage: 34, spreadHip: 0.026, spreadAds: 0.0012, recoil: { pitch: 0.021, yaw: 0.007, kick: 0.028, rise: 0.05 },
     reload: { tac: 2.15, empty: 2.65 }, hip: [0.125, -0.15, -0.33], adsZ: -0.2, adsFov: 0.78, adsTime: 0.22, mass: 1.0,
   },
   pistol: {
-    name: 'PISTOL 9MM', build: buildPistol, sound: 'pistol', modes: ['semi'], rpm: 450, cap: 17, reserve: 68,
+    name: 'PISTOL 9MM', build: buildPistol, sound: 'pistol', sfx: '_p', modes: ['semi'], rpm: 450, cap: 17, reserve: 68,
     damage: 25, spreadHip: 0.03, spreadAds: 0.003, recoil: { pitch: 0.03, yaw: 0.01, kick: 0.022, rise: 0.11 },
     reload: { tac: 1.55, empty: 1.9 }, hip: [0.11, -0.13, -0.4], adsZ: -0.36, adsFov: 0.9, adsTime: 0.16, mass: 0.6,
   },
@@ -144,14 +144,15 @@ export class WeaponSystem {
         if (a.empty) keys.push([inT + 0.4, R ? [0.02, toWell[1] + 0.07, toWell[2] - 0.03] : [0, 0.09, 0.02]], [inT + 0.6, R ? [0.02, toWell[1] + 0.07, toWell[2] - 0.03] : [0, 0.09, 0.02]]);
         keys.push([D - 0.15, [0, 0, 0]]);
         leftOff.splice(0, 3, ...track(keys, T));
-        ev(0.3, () => this.ctx.audio.play2D('magout', { gain: 0.8 }));
+        ev(0.3, () => this.ctx.audio.play2D('magout' + this.def.sfx, { gain: 0.8 }));
+        if (a.empty) ev(0.75, () => { const f = this.ctx.player.pos; this.ctx.audio.play3D('magdrop', [f.x, f.y + 0.05, f.z], { gain: 0.6, maxDist: 15 }); });
         ev(inT - 0.02, () => {
-          this.ctx.audio.play2D('magin', { gain: 0.85 });
+          this.ctx.audio.play2D('magin' + this.def.sfx, { gain: 0.85 });
           const need = this.def.cap - st.mag; const take = Math.min(need, st.reserve);
           st.mag += take; st.reserve -= take;
         });
         if (a.empty) {
-          ev(inT + 0.45, () => { this.ctx.audio.play2D('bolt', { gain: 0.9 }); if (st.mag > 0) { st.mag--; st.chamber = true; } });
+          ev(inT + 0.45, () => { this.ctx.audio.play2D('bolt' + this.def.sfx, { gain: 0.9 }); if (st.mag > 0) { st.mag--; st.chamber = true; } });
           boltZ = T > inT + 0.45 ? 0 : (R ? 0 : 0.035);
           if (T > inT + 0.45 && T < inT + 0.6) { rx += 0.03; pz += 0.008; }
         }
@@ -169,7 +170,7 @@ export class WeaponSystem {
       } else if (a.type === 'switch') {
         if (!a.swapped && a.t >= 0.28) {
           this.models[this.cur].group.visible = false; this.cur = a.to; this.models[this.cur].group.visible = true; a.swapped = true;
-          this.ctx.audio.play2D(this.cur === 'rifle' ? 'bolt' : 'magin', { gain: 0.4, rate: 1.2 });
+          this.ctx.audio.play2D('cloth', { gain: 0.6 });
         }
         const dn = a.swapped ? 1 - ease(Math.min(1, (a.t - 0.28) / 0.34)) : ease(a.t / 0.28);
         py = -0.22 * dn; rx = -0.6 * dn; rz = 0.3 * dn;
@@ -250,7 +251,7 @@ export class WeaponSystem {
     const ej = new THREE.Vector3(0.16, -0.06, -0.42).applyMatrix4(this.cam.matrixWorld);
     const ev = new THREE.Vector3(1.6 + Math.random() * 0.8, 1.2 + Math.random() * 0.8, 0.3 + Math.random() * 0.4).applyQuaternion(mainCam.quaternion);
     this.ctx.effects.eject([ej.x, ej.y, ej.z], [ev.x + P.vel.x, ev.y, ev.z + P.vel.z], this.cur === 'pistol');
-    this.ctx.audio.play2D(w.sound, { gain: 1, send: 0.75, pri: 3, rate: 0.96 + Math.random() * 0.08 });
+    this.ctx.audio.play2D(w.sound, { gain: 1, send: 0.45, pri: 3, rate: 0.96 + Math.random() * 0.08 });
     this.ctx.flashLight(this.muzzleW);
     this.ctx.effects.puff([this.muzzleW.x, this.muzzleW.y, this.muzzleW.z], [this._d.x * 0.6, this._d.y * 0.6 + 0.1, this._d.z * 0.6], 2, 0.12, 0.12, 1.2, 0.15);
   }

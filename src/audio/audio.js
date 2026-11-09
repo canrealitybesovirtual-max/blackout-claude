@@ -40,6 +40,7 @@ export class AudioEngine {
     this.rev = [0, 1].map(() => { const c = ctx.createConvolver(), g = ctx.createGain(); g.gain.value = 0; this.send.connect(c); c.connect(g); g.connect(this.master); return { c, g, kind: null }; });
     this.revIdx = 0;
     this._synth();
+    await this._samples();
     // voice pools
     this.v2 = Array.from({ length: 6 }, () => this._voice(false));
     this.v3 = Array.from({ length: this.profile.voices }, () => this._voice(true));
@@ -169,7 +170,27 @@ export class AudioEngine {
     }
     this.breath.g.gain.setTargetAtTime(fatigue * 0.35, t, 0.5);
     this.nextBoom -= dt;
-    if (this.nextBoom <= 0) { this.nextBoom = 55 + Math.random() * 70; this.play2D('boom', { gain: 0.8, send: 0.4, pri: 2, rate: 0.9 + Math.random() * 0.2 }); if (this.onBoom) this.onBoom(); }
+    if (this.nextBoom <= 0) { this.nextBoom = 55 + Math.random() * 70; this.play2D('boom', { gain: 0.9, send: 0.5, pri: 2, lp: 380, rate: 0.75 + Math.random() * 0.15 }); if (this.onBoom) this.onBoom(); } // far away: only the low end survives
+  }
+
+  // recorded samples replace synthesized ones when they load (synth stays as offline fallback)
+  async _samples() {
+    const n = (base, k) => Array.from({ length: k }, (_, i) => `${base}${i + 1}`);
+    const M = {
+      rifle: n('ak', 5), pistol: ['pistol1'], dry: n('dry', 4),
+      magout_r: n('akMagOut', 3), magin_r: ['akMagIn1'], bolt_r: n('akRackFwd', 2),
+      magout_p: n('glkMagOut', 2), magin_p: n('glkMagIn', 2), bolt_p: ['glkSlideRel'],
+      casing_r: n('brassM', 8), casing_p: n('brassS', 5), cloth: n('cloth', 7),
+      doorStop: n('doorShut', 3), hvac: ['ambServer'], breath: ['breaths'], boom: n('nadeBoom', 2), magdrop: n('magDrop', 3),
+    };
+    const t0 = performance.now(), dec = {};
+    const load = async f => { try { const r = await fetch(`sounds/${f}.mp3`); if (!r.ok) return null; return await this.ctx.decodeAudioData(await r.arrayBuffer()); } catch (e) { return null; } };
+    const files = [...new Set(Object.values(M).flat())];
+    const all = Promise.all(files.map(async f => { dec[f] = await load(f); }));
+    await Promise.race([all, new Promise(r => setTimeout(r, 5000))]);
+    let used = 0;
+    for (const k in M) { const list = M[k].map(f => dec[f]).filter(Boolean); if (list.length) { this.buf[k] = list; used += list.length; } }
+    this.sampleInfo = `${used}/${files.length} samples, ${(performance.now() - t0).toFixed(0)} ms`;
   }
 
   // ------------------------------------------------------------------ synthesis
@@ -237,6 +258,7 @@ export class AudioEngine {
     B.boom = [mk(4.0, d => { const n = d.length, x = noise(n, 171); lp(x, 70, sr); lp(x, 120, sr); for (let i = 0; i < n; i++) { const t = i / sr; d[i] = x[i] * env(t, 0.06, 1.1) * 40; } add(d, sine(n, 45, 28, 0.8), 0, 0.6); const r = noise(n, 172); lp(r, 300, sr); for (let i = 0; i < n; i++) d[i] += r[i] * env(i / sr - 0.4 > 0 ? i / sr - 0.4 : 0, 0.3, 1.2) * 0.8; norm(d, 0.9); })];
     B.breath = [loopBuf(3.2, (d, n) => { const x = noise(n, 181), y = noise(n, 182); bp(x, 1300, 0.7, sr); bp(y, 800, 0.8, sr); for (let i = 0; i < n; i++) { const t = i / sr; const inh = t < 1.1 ? Math.sin(Math.PI * t / 1.1) ** 2 : 0; const exh = t > 1.3 && t < 2.6 ? Math.sin(Math.PI * (t - 1.3) / 1.3) ** 2 : 0; d[i] = x[i] * inh * 0.6 + y[i] * exh; } norm(d, 0.5); })];
 
+    for (const [a, b] of [['magout_r', 'magout'], ['magout_p', 'magout'], ['magin_r', 'magin'], ['magin_p', 'magin'], ['bolt_r', 'bolt'], ['bolt_p', 'bolt'], ['casing_r', 'casing'], ['casing_p', 'casing'], ['magdrop', 'imp_soft']]) B[a] = B[b];
     // room impulse responses
     const ir = (rt, damp, pre, er, seed) => mk(rt * 1.2, (d, n, c) => {
       const x = noise(n, seed + c * 7), lo = Float32Array.from(x); lp(lo, damp, sr);

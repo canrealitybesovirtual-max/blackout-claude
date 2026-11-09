@@ -221,6 +221,7 @@ async function boot() {
   async function start() {
     menu.classList.add('hide');
     await audio.init();
+    perf.notes.audio = audio.sampleInfo || 'synth only';
     audio.setZone(zm.byId[zm.current].reverb, zm.byId[zm.current].ambience);
     input.enabled = true; running = true;
     if (!input.dragLook && !('ontouchstart' in window)) input.requestLock();

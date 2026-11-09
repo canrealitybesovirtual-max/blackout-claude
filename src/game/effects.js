@@ -94,7 +94,7 @@ export class Effects {
   clearHoles() { this.holes.count = 0; this.hi = 0; }
   eject(p, v, pistol) {
     const c = this.cs[this.ci++ % this.cs.length];
-    c.p.set(...p); c.v.set(...v); c.life = 6; c.bounces = 0;
+    c.p.set(...p); c.v.set(...v); c.life = 6; c.bounces = 0; c.pistol = pistol;
     c.q.setFromEuler(new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.PI / 2));
     c.w.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
   }
@@ -159,7 +159,7 @@ export class Effects {
           c.p.addScaledVector(c.v, Math.max(0, t - 0.006) / sp);
           c.v.reflect(n).multiplyScalar(0.32); c.v.addScaledVector(n, 0.05);
           c.w.multiplyScalar(0.5);
-          if (c.bounces++ < 2 && sp > 0.8) this.audio.play3D('casing', [c.p.x, c.p.y, c.p.z], { gain: 0.35 * Math.min(1, sp / 3), maxDist: 15, pri: 0 });
+          if (c.bounces++ === 0) this.audio.play3D(c.pistol ? 'casing_p' : 'casing_r', [c.p.x, c.p.y, c.p.z], { gain: 0.55, maxDist: 15, pri: 0 }); // recording holds the whole bounce
           if (n.y > 0.7 && c.v.length() < 0.25) { c.v.set(0, 0, 0); c.w.set(0, 0, 0); c.bounces = 9; c.q.setFromEuler(new THREE.Euler(0, Math.random() * 6, Math.PI / 2)); }
         } else c.p.addScaledVector(c.v, dt);
       }
